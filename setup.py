@@ -34,5 +34,6 @@ setup(  name = 'coi-services',
             'WebTest',
             'requests',
             'seawater',
+            'redis'
         ],
      )

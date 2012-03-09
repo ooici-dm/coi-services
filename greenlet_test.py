@@ -21,7 +21,7 @@ def proc(conn, points, block_size, timeout):
             packet_block = coordinator.safe_lpush_item_rpop_range(datum)
             if packet_block:
                 gevent.Greenlet(atomic_verify,conn=conn,packet_block=packet_block).start()
-            
+
             
 
 if __name__ == '__main__':
@@ -29,8 +29,8 @@ if __name__ == '__main__':
     conn = redis.StrictRedis('localhost', db=0)
     greenlet_pool = list()
     block_size = 7 # prime number
-    data_size = block_size * 100
-    pool_size = 10
+    data_size = block_size * 20
+    pool_size = 5
     for i in xrange(pool_size):
         print 'starting greenlet'
         g = gevent.Greenlet(proc,conn=conn, points=data_size, block_size=block_size, timeout=10)

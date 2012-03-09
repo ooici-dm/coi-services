@@ -15,7 +15,7 @@ import redis
 import random
 from uuid import uuid4
 import time
-
+import gevent
 
 
 class RedisCoordination(object):
@@ -39,8 +39,9 @@ class RedisCoordination(object):
         self._my_backup_list_name = None
         self._my_backup_lock_name = None
 
-    def __enter__(self, ):
-
+    def __enter__(self ):
+        self.timeout = gevent.Timeout(self._timeout)
+        self.timeout.start()
         # Start the time out here...
         return self
 
@@ -48,7 +49,7 @@ class RedisCoordination(object):
         # cleanup and deal with any exception thrown during processing
 
         # push the temprary list back to the main list
-
+        self.timeout.cancel()
 
         if value is None:
             self._rserver.srem(self._backups_set_name, self._my_backup_list_name)
@@ -62,8 +63,12 @@ class RedisCoordination(object):
 
     def safe_lpush_item_rpop_range(self, item):
         # Coordination to get the range when the list is full goes here
+        
 
-        current_length = rserver.lpush(self._list_name, item)
+        current_length = self._rserver.lpush(self._list_name, item)
+
+        salt = random.normalvariate(mu=0,sigma=1)
+        
 
         packet_block = None
         if current_length % self._block_size == 0:
@@ -80,11 +85,15 @@ class RedisCoordination(object):
                         for i in xrange(self._block_size):
                             pipe.rpoplpush(self._list_name, self._my_backup_list_name)
 
+                        # slow up the connection
+                        if salt > 2:
+                            gevent.sleep(0.2)
                         pipe.sadd(self._backups_set_name, self._my_backup_list_name)
                         pipe.setex(self._my_backup_lock_name, self._timeout*3, True)
 
-                        packet_block = pipe.execute()
+                        packet_block = pipe.execute()[:-2]
 
+                        self._rserver.delete(self._my_backup_lock_name)
                         break
 
                     except redis.WatchError:
@@ -114,7 +123,7 @@ class RedisCoordination(object):
                         # Someone else got there first!
                         pass
 
-
+                
         return packet_block
 
 

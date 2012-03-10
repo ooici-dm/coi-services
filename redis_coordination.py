@@ -90,7 +90,7 @@ class RedisCoordination(object):
             with self._rserver.pipeline() as pipe:
 
                 pipe.multi()
-                for i in xrange(self._block_size): # Should be blocksize but may be a multiple of block size when an error has occured!
+                for i in xrange(self._block_size): 
                     pipe.rpoplpush(self._list_name, self._my_backup_list_name)
 
                 self._packet_block = pipe.execute()

@@ -20,7 +20,9 @@ import gevent
 
 class RedisCoordination(object):
 
-    def __init__(self, rserver=None, name='', block_size=50, timeout=10):
+    def __init__(self, rserver=None, name='', block_size=50, timeout=10, id=None):
+
+        self._id = id
 
         self._rserver = rserver # The redis connection
 
@@ -51,15 +53,11 @@ class RedisCoordination(object):
         # push the temprary list back to the main list
         self.timeout.cancel()
 
-        if value is None:
+        if value is None and self._my_backup_list_name is not None:
+            print '(ID:%s) EXIT: Cleaning up my backup list from set: %s' % (self._id, self._my_backup_list_name)
             self._rserver.srem(self._backups_set_name, self._my_backup_list_name)
             self._rserver.delete(self._my_backup_list_name)
 
-
-    def call_me(self, item):
-        self.internal_buffer = item
-        # Do fancy stuff with item
-        self.safe_lpush_item_rpop_range(item)
 
     def safe_lpush_item_rpop_range(self, item):
         # Coordination to get the range when the list is full goes here
@@ -86,10 +84,10 @@ class RedisCoordination(object):
                             pipe.rpoplpush(self._list_name, self._my_backup_list_name)
 
                         # slow up the connection
-                        if salt > 2:
-                            gevent.sleep(0.2)
+                        #if salt > 2:
+                        #    gevent.sleep(0.6)
+                        pipe.setex(self._my_backup_lock_name, self._timeout*2, True)
                         pipe.sadd(self._backups_set_name, self._my_backup_list_name)
-                        pipe.setex(self._my_backup_lock_name, self._timeout*3, True)
 
                         packet_block = pipe.execute()[:-2]
 
@@ -97,27 +95,37 @@ class RedisCoordination(object):
                         break
 
                     except redis.WatchError:
-                        print 'Watch Error'
+                        print '(ID:%s) Watch Error' % self._id
 
                         continue
 
         else:
             # Check for backup lists that have expired!
 
-            locks = self._rserver.smembers(self._backups_set_name)
+            backup_lists = self._rserver.smembers(self._backups_set_name)
 
-            for lock_key in locks:
-                timed_out =self._rserver.get(lock_key)
+            for backup_list in backup_lists:
+                backup_lock = backup_list[:-5]
+                timed_out =self._rserver.get(backup_lock)
 
                 if timed_out is None:
-                    list_key = lock_key[:-5]
-                    result = self._rserver.srem(self._backups_set_name, list_key)
+                    result = self._rserver.srem(self._backups_set_name, backup_list)
 
-                    if result is 1:
+                    print '(ID:%s) Removed backup list name "%s" from backup set. Result: "%s"' % (self._id, backup_list, result)
+                    if result:
                         # Its our list to clean up
 
-                        packet_block = self._rserver.lrange(list_key, 0, -1)
+                        self._my_backup_list_name = backup_list
+                        self._my_backup_lock_name = backup_lock
 
+                        self._rserver.setex(self._my_backup_lock_name, self._timeout*2, True)
+                        self._rserver.sadd(self._backups_set_name, self._my_backup_list_name)
+
+                        packet_block = self._rserver.lrange(backup_list, 0, -1)
+                        print '(ID:%s) Got backup list: %s' % (self._id, packet_block)
+
+
+                        break
 
                     else:
                         # Someone else got there first!

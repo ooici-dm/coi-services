@@ -1,19 +1,23 @@
+#!/usr/bin/env python
 
-#from gevent.monkey import patch_all
+from gevent.monkey import patch_all
 
-#patch_all()
-#import gevent
+patch_all()
+import gevent
 import redis
 import uuid
 from redis_coordination import RedisCoordination
 import random
 import time
-import subprocess
+import os
 
 def atomic_verify(conn, packet_block):
     for datum in packet_block:
         result = conn.srem('compareset', datum)
 
+        if not result:
+
+            print 'ERROR IN COMPARISON!!!! Tried to remove data that was not there!'
 
 def proc(id, points, block_size, timeout, flag):
 
@@ -33,13 +37,14 @@ def proc(id, points, block_size, timeout, flag):
 
 
                 if packet_block:
-                    #if salt > 2.0:
-                    #    gevent.sleep(.7)
+                    if salt > 2.0:
+                        time.sleep(1.0)
 
-                    #if salt < -2.0:
-                    #    raise RuntimeError('Shit happened')
+                    if salt < -2.0:
+                        raise RuntimeError('I suck')
 
                     #gevent.Greenlet(atomic_verify,conn=conn,packet_block=packet_block).start()
+                    atomic_verify(conn=conn, packet_block=packet_block)
 
         except:
             # Keep running...
@@ -50,7 +55,7 @@ def proc(id, points, block_size, timeout, flag):
 
         time.sleep(6)
 
-        for i in xrange(block_size):
+        for i in xrange(block_size*20):
             datum = str(uuid.uuid4())
 
             conn.sadd('compareset', datum)
@@ -60,29 +65,23 @@ def proc(id, points, block_size, timeout, flag):
                 packet_block = coordinator.safe_lpush_item_rpop_range(datum)
                 print 'backup cleanup: %s' % packet_block
                 if packet_block:
-                    gevent.Greenlet(atomic_verify,conn=conn,packet_block=packet_block).start()
+                    atomic_verify(conn=conn, packet_block=packet_block)
 
 
 
 if __name__ == '__main__':
-    
+    import sys
+    block_size = 5 # prime number
+    data_size = block_size * 400
+    flag = None
+    if len(sys.argv) > 1:
+        flag = sys.argv[1]
+        print 'Got Flag: "%s"' % flag
 
-    greenlet_pool = list()
-    block_size = 15 # prime number
-    data_size = block_size * 40
-    pool_size = 4
-    for i in xrange(pool_size):
-        print 'starting greenlet'
-        g = gevent.Greenlet(proc, id=i, points=data_size, block_size=block_size, timeout=2, flag= i==0)
-        g.start()
-        greenlet_pool.append(g)
-    gevent.sleep(2)
-    poor_bastard = random.randint(0,pool_size-1)
-    #greenlet_pool[poor_bastard].kill()
-    print 'joining'
-    gevent.joinall(greenlet_pool)
-    print 'Joined!!!'
-    
+    g = gevent.Greenlet(proc, id=os.getpid(), points=data_size, block_size=block_size, timeout=1.0, flag=flag)
+    g.start()
+
+    gevent.joinall([g,])
     
         
     

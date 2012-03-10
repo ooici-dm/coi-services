@@ -11,11 +11,12 @@ To Run:
 '''
 
 
+import gevent
+
 import redis
 import random
 from uuid import uuid4
 import time
-import gevent
 
 
 class RedisCoordination(object):
@@ -31,7 +32,7 @@ class RedisCoordination(object):
         self._base_name = name # The list name to use in redis
 
         self._timeout = timeout # the timeout at which point exit is called
-
+        assert timeout >= 1, 'Timeout must be greater than 1.'
         # Setup the internals of this method
 
         self._list_name = '%s.list' % self._base_name
@@ -55,8 +56,16 @@ class RedisCoordination(object):
 
         if value is None and self._my_backup_list_name is not None:
             print '(ID:%s) EXIT: Cleaning up my backup list from set: %s' % (self._id, self._my_backup_list_name)
-            self._rserver.srem(self._backups_set_name, self._my_backup_list_name)
-            self._rserver.delete(self._my_backup_list_name)
+
+            result = self._rserver.srem(self._backups_set_name, self._my_backup_list_name)
+            assert result is True, 'Failed to remove my list name from the set'
+
+            result = self._rserver.delete(self._my_backup_list_name)
+            assert result is True, 'Failed to remove my backup list'
+
+            result = self._rserver.delete(self._my_backup_lock_name)
+            assert result is True, 'Failed to remove my lock'
+
 
 
     def safe_lpush_item_rpop_range(self, item):
@@ -64,15 +73,17 @@ class RedisCoordination(object):
         
 
         current_length = self._rserver.lpush(self._list_name, item)
+        #print '(ID:%s) content_length: %d' % (self._id, current_length)
 
         salt = random.normalvariate(mu=0,sigma=1)
-        
+
 
         packet_block = None
         if current_length % self._block_size == 0:
+            queue_name = str(uuid4())
 
-            self._my_backup_list_name = '%s.%s.list' % (self._base_name, self._rserver.incr(self._incr_name))
-            self._my_backup_lock_name = '%s.lock' % self._my_backup_list_name
+            self._my_backup_list_name = '%s.%s.list' % (self._base_name, queue_name)
+            self._my_backup_lock_name = '%s.%s.lock' % (self._base_name, queue_name)
 
             with self._rserver.pipeline() as pipe:
 
@@ -86,18 +97,21 @@ class RedisCoordination(object):
                         # slow up the connection
                         #if salt > 2:
                         #    gevent.sleep(0.6)
-                        pipe.setex(self._my_backup_lock_name, self._timeout*2, True)
+                        pipe.setex(self._my_backup_lock_name, int(self._timeout*2), True)
                         pipe.sadd(self._backups_set_name, self._my_backup_list_name)
 
-                        packet_block = pipe.execute()[:-2]
 
-                        self._rserver.delete(self._my_backup_lock_name)
+                        packet_block = pipe.execute()[:-2]
+                        if len(packet_block) != self._block_size:
+                            print '(ID:%s) Error: packet size does not match block size.' % self._id
                         break
 
                     except redis.WatchError:
-                        print '(ID:%s) Watch Error' % self._id
-
+                        print '(ID:%s) Error: Watch Pipe 1' % self._id
                         continue
+                    #except redis.exceptions.ResponseError:
+                    #    print 'I got this'
+                    #    continue
 
         else:
             # Check for backup lists that have expired!
@@ -105,36 +119,46 @@ class RedisCoordination(object):
             backup_lists = self._rserver.smembers(self._backups_set_name)
 
             for backup_list in backup_lists:
-                backup_lock = backup_list[:-5]
-                timed_out =self._rserver.get(backup_lock)
+                backup_lock = '%s.lock' % backup_list[:-5]
+                list_is_locked =self._rserver.exists(backup_lock)
 
-                if timed_out is None:
-                    result = self._rserver.srem(self._backups_set_name, backup_list)
+                print '(ID:%s) List %s is %s locked %s' % (self._id, backup_list, list_is_locked, backup_lock)
+
+                if not list_is_locked:
+                    with self._rserver.pipeline() as pipe:
+                        try:
+                            pipe.watch(self._backups_set_name)
+                            pipe.multi()
+                            pipe.srem(self._backups_set_name, backup_list)
+                            result = pipe.execute()
+
+                        except redis.WatchError:
+                            print '(ID:%s) Error: Watche Pipe 2... passing' % self._id
+                            result = [False,]
 
                     print '(ID:%s) Removed backup list name "%s" from backup set. Result: "%s"' % (self._id, backup_list, result)
-                    if result:
+                    if result[0] is True:
                         # Its our list to clean up
-
                         self._my_backup_list_name = backup_list
                         self._my_backup_lock_name = backup_lock
+                        packet_block = self._rserver.lrange(backup_list, 0, -1)
 
-                        self._rserver.setex(self._my_backup_lock_name, self._timeout*2, True)
+                        self._rserver.setex(self._my_backup_lock_name, int(self._timeout*2), 'True')
                         self._rserver.sadd(self._backups_set_name, self._my_backup_list_name)
 
-                        packet_block = self._rserver.lrange(backup_list, 0, -1)
-                        print '(ID:%s) Got backup list: %s' % (self._id, packet_block)
+                        print '(ID:%s) Got backup list name: %s; contents: %s' % (self._id, self._my_backup_list_name, packet_block)
 
-
-                        break
 
                     else:
                         # Someone else got there first!
                         pass
 
+
+
                 
         return packet_block
 
-
+"""
 if __name__ == "__main__":
     #-------------- This is a process --------------#
     #
@@ -176,7 +200,7 @@ if __name__ == "__main__":
                     assert result == 1
 
 
-
+"""
 
 
 

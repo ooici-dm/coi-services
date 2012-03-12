@@ -1,9 +1,17 @@
 #!/usr/bin/env python
 
-import redis
+"""
+@author David Stuebe <dstuebe@asascience.com>
+@author Luke Campbell
+@author Swarbhanu Chatterjee
+
+Runs pool_size # of test cases of the redis_coordinator_test at one time demonstrating distributed state between them.
+
+To Run:
+bin/python subprocess_redis.py
+"""
 
 import subprocess
-
 
 if __name__ == '__main__':
 
@@ -17,7 +25,7 @@ if __name__ == '__main__':
         print 'starting subprocess %d' % i
         job = 'bin/python'
 
-        arg = 'greenlet_test.py'
+        arg = 'redis_coordinator_test.py'
 
         proc = [job, arg]
         if i==1:
@@ -26,7 +34,7 @@ if __name__ == '__main__':
         out = f.fileno()
         open_files.append(f)
 
-        subprocess_pool.append(subprocess.Popen(proc, shell=False, stdout=out, stderr=out))#=subprocess.PIPE, stderr=subprocess.PIPE ))
+        subprocess_pool.append(subprocess.Popen(proc, shell=False, stdout=out, stderr=out))
 
 
 

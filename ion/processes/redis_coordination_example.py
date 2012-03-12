@@ -16,12 +16,15 @@ from pyon.ion.process import StandaloneProcess
 from pyon.public import log
 from redis_coordination import RedisCoordination
 from pyon.ion.transform import TransformDataProcess
-from pyon.ion.process import StandaloneProcess
 from prototype.sci_data.stream_defs import ctd_stream_packet, SBE37_CDM_stream_definition, ctd_stream_definition
 import redis
 from interface.services.dm.ipubsub_management_service import PubsubManagementServiceClient
 from interface.objects import ProcessDefinition, StreamQuery
 from pyon.service.service import BaseService
+
+import redis
+from uuid import uuid4
+import gevent
 
 
 class RedisCoordinationExample(TransformDataProcess):
@@ -45,7 +48,7 @@ class RedisCoordinationExample(TransformDataProcess):
         dset_max_size = 15 # Number of elements to put in the list before aggregation and chop
 
 
-        data_points = dset_max_size * 1000
+        data_points = dset_max_size * 10
 
 
         COMPARESET = 'compareset'
@@ -56,20 +59,20 @@ class RedisCoordinationExample(TransformDataProcess):
         # Set up subscribers
         #-----------------------
 
-        pubsub_cli = PubsubManagementServiceClient(node=self.container.node)
+        exchange_name = "redis_queue"
 
-        stream = pubsub_cli.create_stream()
+        query = ExchangeQuery()
 
-        subscription_id = pubsub_cli.create_subscription(
-            query=StreamQuery([stream]),
-            exchange_name='redis_queue',
-            name='Subscription',
-            description='Description'
-        )
+        subscription_id = self.pubsub_cli.create_subscription(query,
+            exchange_name,
+            "SampleExchangeSubscription",
+            "Sample Exchange Subscription Description")
+
+
 
         def message_received(message, headers):
 
-            log.warn("message received: %s" % message )
+            print("message received: %s" % message )
 
             with RedisCoordination(rserver=rserver, name=self.dataset_name, block_size=dset_max_size, timeout=15 ) as coordinator:
 
@@ -84,8 +87,8 @@ class RedisCoordinationExample(TransformDataProcess):
 
                         assert result == 1
 
-        subscriber_registrar = StreamSubscriberRegistrar(process=self.container, node=self.container.node)
-        subscriber = subscriber_registrar.create_subscriber(exchange_name='redis_queue', callback=message_received)
+        subscriber_registrar = StreamSubscriberRegistrar(process=cc, node=cc.node)
+        subscriber = subscriber_registrar.create_subscriber(exchange_name=exchange_name, callback=message_received)
 
         # Start subscribers
         subscriber.start()
@@ -101,6 +104,8 @@ class RedisCoordinationExample(TransformDataProcess):
 
         for i in xrange(data_points):
 
+            print("inside loop")
+
             new_data = str(uuid4())
 
             # For comparison purposes - to make sure we got everything
@@ -115,6 +120,8 @@ class RedisDataPublisher(StandaloneProcess):
         super(StandaloneProcess, self).__init__(*args,**kwargs)
         #@todo Init stuff
 
+        print("Data publisher initialized")
+
         outgoing_stream_def = SBE37_CDM_stream_definition()
 
 
@@ -128,12 +135,15 @@ class RedisDataPublisher(StandaloneProcess):
         '''
 
         # Get the stream(s)
-        stream_id = self.CFG.get_safe('process.stream_id',{})
+
+        pubsub_cli = PubsubManagementServiceClient(node=cc.node)
+
+        stream_id = pubsub_cli.create_stream()
 
         self.greenlet_queue = []
 
 
-        self.stream_publisher_registrar = StreamPublisherRegistrar(process=self,node=self.container.node)
+        self.stream_publisher_registrar = StreamPublisherRegistrar(process=self,node=cc.node)
         # Needed to get the originator's stream_id
         self.stream_id= stream_id
 
@@ -147,6 +157,6 @@ class RedisDataPublisher(StandaloneProcess):
 
     def _publish(self, msg):
 
-        log.warn("publishing message: %s" % msg)
+        print("publishing message: %s" % msg)
 
         self.publisher.publish(msg)

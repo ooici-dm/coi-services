@@ -52,8 +52,10 @@ class RedisCoordinationTransform(TransformDataProcess):
 
         salt = random.normalvariate(mu=0,sigma=1)
 
+        log.warn("Got packet: %s" % packet)
+
         try:
-            with RedisCoordination(rserver=self.conn, block_size=None, name='foo', timeout=None, packet=packet, log_id=None) as coordinator:
+            with RedisCoordination(rserver=self.conn, block_size=5, name='foo', timeout=10, packet=packet) as coordinator:
 
                 for item in coordinator:
                     #if salt > 2.0:
@@ -65,15 +67,14 @@ class RedisCoordinationTransform(TransformDataProcess):
 
                     result = self.conn.srem(self.COMPARE_SET, item)
 
-                    print("RedisCoordinationTransform removed from %s, the item, %s" % (self.COMPARE_SET, item))
+                    log.warn("RedisCoordinationTransform removed from %s, the item, %s" % (self.COMPARE_SET, item))
 
                     if not result:
                         print 'ERROR IN COMPARISON!!!! Tried to remove data that was not there!'
 
-        except:
+        except Exception as exc:
             # Keep running the test......
-            pass
-
+            log.warn("Got an exception:: %s" %  exc.message)
 
 
 class RedisCoordinationPublisher(StandaloneProcess):

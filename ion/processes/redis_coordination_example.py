@@ -54,8 +54,11 @@ class RedisCoordinationTransform(TransformDataProcess):
 
         log.warn("Got packet: %s" % packet)
 
+        name = packet['name']
+        data = packet['value']
+
         try:
-            with RedisCoordination(rserver=self.conn, block_size=5, name='foo', timeout=10, packet=packet) as coordinator:
+            with RedisCoordination(rserver=self.conn, block_size=5, name=name, timeout=10, packet=data) as coordinator:
 
                 for item in coordinator:
                     #if salt > 2.0:
@@ -128,7 +131,9 @@ class RedisCoordinationPublisher(StandaloneProcess):
 
             self.conn.sadd(self.COMPARE_SET, datum)
 
-            log.warn('RedisCoordinationPublisher sending: %s\n' % datum)
-            self.publisher.publish(datum)
+            packet_dict = {'name' : 'coordinator_name', 'value' : datum}
+
+            log.warn('RedisCoordinationPublisher sending: %s\n' % packet_dict)
+            self.publisher.publish(packet_dict)
 
             time.sleep(2.0)

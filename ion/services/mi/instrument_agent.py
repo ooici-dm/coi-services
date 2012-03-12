@@ -240,7 +240,7 @@ class InstrumentAgent(ResourceAgent):
         if isinstance(data, int):
             # not character data, so check for lost connection
             if data == -1:
-                log.info("InstAgent.telnetInputProcessor: connection lost")
+                log.warning("InstAgent.telnetInputProcessor: connection lost")
                 self._fsm.on_event(InstrumentAgentEvent.GO_OBSERVATORY)
             else:
                 log.error("InstAgent.telnetInputProcessor: got unexpected integer " + str(data))
@@ -513,7 +513,7 @@ class InstrumentAgent(ResourceAgent):
 
         self._dvr_config = dvr_config or self._dvr_config
         result = self._start_driver(self._dvr_config)
-        if not result:
+        if isinstance(result, int):
             next_state = InstrumentAgentState.INACTIVE
             
         return (next_state, result)
@@ -563,7 +563,7 @@ class InstrumentAgent(ResourceAgent):
         
         self._dvr_config = dvr_config or self._dvr_config
         result = self._start_driver(self._dvr_config)
-        if not result:
+        if isinstance(result, int):
             next_state = InstrumentAgentState.INACTIVE
                 
         return (next_state, result)
@@ -1061,6 +1061,8 @@ class InstrumentAgent(ResourceAgent):
             log.info('Insturment agent %s started its driver.', self._proc_name)
             self._construct_packet_factories(dvr_mod)
 
+        return self._dvr_proc.pid
+        
     def _stop_driver(self):
         """
         Stop the driver process and driver client.

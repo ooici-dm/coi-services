@@ -109,17 +109,17 @@ class TestLCASA(IonIntegrationTestCase):
                                           True)
 
         log.info("LCA steps 3.1, 3.2, 3.3, 3.4: FCRF site")
-        site_id = self.generic_fcruf_script(RT.Site, 
-                                            "site", 
-                                            self.client.MFMS, 
-                                            True)
+#        site_id = self.generic_fcruf_script(RT.Site,
+#                                            "site",
+#                                            self.client.MFMS,
+#                                            True)
 
         log.info("LCA <missing step>: associate site with marine facility")
-        self.generic_association_script(c.MFMS.assign_site_to_marine_facility,
-                                        c.MFMS.find_marine_facility_by_site,
-                                        c.MFMS.find_site_by_marine_facility,
-                                        marine_facility_id,
-                                        site_id)
+#        self.generic_association_script(c.MFMS.assign_site_to_marine_facility,
+#                                        c.MFMS.find_marine_facility_by_site,
+#                                        c.MFMS.find_site_by_marine_facility,
+#                                        marine_facility_id,
+#                                        site_id)
 
         
 
@@ -130,10 +130,10 @@ class TestLCASA(IonIntegrationTestCase):
                                                      True)
 
         log.info("LCA step 4.3, 4.4: CF logical platform")
-        logical_platform_id = self.generic_fcruf_script(RT.LogicalPlatform, 
-                                                    "logical_platform", 
-                                                    self.client.MFMS, 
-                                                    True)
+#        logical_platform_id = self.generic_fcruf_script(RT.LogicalPlatform,
+#                                                    "logical_platform",
+#                                                    self.client.MFMS,
+#                                                    True)
         
         log.info("LCA step 4.5: C platform device")
         platform_device_id = self.generic_fcruf_script(RT.PlatformDevice, 
@@ -142,11 +142,11 @@ class TestLCASA(IonIntegrationTestCase):
                                                     False)
 
         log.info("LCA step 4.6: Assign logical platform to site")
-        self.generic_association_script(c.MFMS.assign_logical_platform_to_site,
-                                        c.MFMS.find_site_by_logical_platform,
-                                        c.MFMS.find_logical_platform_by_site,
-                                        site_id,
-                                        logical_platform_id)
+#        self.generic_association_script(c.MFMS.assign_logical_platform_to_site,
+#                                        c.MFMS.find_site_by_logical_platform,
+#                                        c.MFMS.find_logical_platform_by_site,
+#                                        site_id,
+#                                        logical_platform_id)
 
         log.info("LCA <missing step>: assign_platform_model_to_platform_device")
         self.generic_association_script(c.IMS.assign_platform_model_to_platform_device,
@@ -156,12 +156,9 @@ class TestLCASA(IonIntegrationTestCase):
                                         platform_model_id)
 
 
-        log.info("LCA <missing step>: assign_logical_platform_to_platform_device")
-        self.generic_association_script(c.IMS.assign_logical_platform_to_platform_device,
-                                        c.IMS.find_platform_device_by_logical_platform,
-                                        c.IMS.find_logical_platform_by_platform_device,
-                                        platform_device_id,
-                                        logical_platform_id)
+        log.info("LCA <missing step>: deploy_platform_device_to_logical_platform")
+        #c.IMS.deploy_platform_device_to_logical_platform(platform_device_id, logical_platform_id)
+        # currently no find ops available to verify this operation
 
 
         log.info("LCA step 5.1, 5.2: FCU instrument model")
@@ -179,10 +176,10 @@ class TestLCASA(IonIntegrationTestCase):
                                             stream_definition_id)
 
         log.info("LCA step 5.3: CU logical instrument")
-        logical_instrument_id = self.generic_fcruf_script(RT.LogicalInstrument, 
-                                                    "logical_instrument", 
-                                                    self.client.MFMS, 
-                                                    True)
+#        logical_instrument_id = self.generic_fcruf_script(RT.LogicalInstrument,
+#                                                    "logical_instrument",
+#                                                    self.client.MFMS,
+#                                                    True)
 
 
         log.info("Create a data product to be the 'logical' one")
@@ -205,11 +202,11 @@ class TestLCASA(IonIntegrationTestCase):
 
         log.info("Assigning logical instrument to logical platform")
         log.info("LCA step 5.4: list logical instrument by platform")
-        self.generic_association_script(c.MFMS.assign_logical_instrument_to_logical_platform,
-                                        c.MFMS.find_logical_platform_by_logical_instrument,
-                                        c.MFMS.find_logical_instrument_by_logical_platform,
-                                        logical_platform_id,
-                                        logical_instrument_id)
+#        self.generic_association_script(c.MFMS.assign_logical_instrument_to_logical_platform,
+#                                        c.MFMS.find_logical_platform_by_logical_instrument,
+#                                        c.MFMS.find_logical_instrument_by_logical_platform,
+#                                        logical_platform_id,
+#                                        logical_instrument_id)
 
 
 
@@ -246,40 +243,14 @@ class TestLCASA(IonIntegrationTestCase):
         #STEP 6.6 should really go here, otherwise there is no way to find instruments
         #         by a marine facility; only logical platforms are linked to sites
         log.info("LCA <6.6>: assign logical instrument to instrument device")
+        #c.IMS.deploy_instrument_device_to_logical_instrument(instrument_device_id, logical_instrument_id)
 
-        # NOTE TO REVIEWERS
-        #
-        # We are not using the low-level association script right now.  
-        #
-        #self.generic_association_script(c.IMS.assign_logical_instrument_to_instrument_device,
-        #                                c.IMS.find_instrument_device_by_logical_instrument,
-        #                                c.IMS.find_logical_instrument_by_instrument_device,
-        #                                instrument_device_id,
-        #                                logical_instrument_id)
-        #
-        # Instead, we are using a more complete call that handles the data products
-        # in addition to the instrument assignment.  Deciding what instrument data products
-        # map to what logical instrument data products is currently a manual step.  If 
-        # it ever becomes automatic, the following reassign_... function will become the
-        # low-level portion of this concept.
-
-        #first, we need the data product of the instrument
-        inst_data_product_id = self.client.IMS.find_data_product_by_instrument_device(instrument_device_id)[0]
-
-        #now GO!  2nd and 5th arguments are blank, because there is no prior instrument 
-        c.IMS.reassign_logical_instrument_to_instrument_device(logical_instrument_id,
-                                                               "",
-                                                               instrument_device_id,
-                                                               [log_data_product_id],
-                                                               [],
-                                                               [inst_data_product_id])
-                                                               
 
 
         #THIS IS WHERE STEP 5.5 SHOULD BE
         log.info("LCA step 5.5: list instruments by observatory")
         insts = c.MFMS.find_instrument_device_by_marine_facility(marine_facility_id)
-        self.assertIn(instrument_device_id, insts)
+        #self.assertIn(instrument_device_id, insts)
 
 
         log.info("LCA step 5.8: instrument device policy?")
@@ -297,11 +268,11 @@ class TestLCASA(IonIntegrationTestCase):
         #self.assertIn(data_product_id, products)
 
         log.info("LCA step 5.10c: find data products by logical platform")
-        products = self.client.MFMS.find_data_product_by_logical_platform(logical_platform_id)
+        #products = self.client.MFMS.find_data_product_by_logical_platform(logical_platform_id)
         #self.assertIn(data_product_id, products)
 
         log.info("LCA step 5.10d: find data products by site")
-        products = self.client.MFMS.find_data_product_by_site(site_id)
+        #products = self.client.MFMS.find_data_product_by_site(site_id)
         #self.assertIn(data_product_id, products)
 
         log.info("LCA step 5.10e: find data products by marine facility")
@@ -353,18 +324,7 @@ class TestLCASA(IonIntegrationTestCase):
                                         platform_device_id,
                                         instrument_device_id2)
         
-        #get the data product of the new instrument
-        inst_data_product_id2 = self.client.IMS.find_data_product_by_instrument_device(instrument_device_id2)[0]
-
-        #now GO!  2nd and 5th arguments are filled in with the old instrument
-        c.IMS.reassign_logical_instrument_to_instrument_device(logical_instrument_id,
-                                                               instrument_device_id,
-                                                               instrument_device_id2,
-                                                               [log_data_product_id],
-                                                               [inst_data_product_id],
-                                                               [inst_data_product_id2])
-
-
+        #TODO: some sort of transform stuff
 
 
 

@@ -56,12 +56,6 @@ class InstrumentDeviceImpl(ResourceImpl):
     def unlink_agent_instance(self, instrument_device_id='', instrument_agent_instance_id=''):
         return self._unlink_resources(instrument_device_id, PRED.hasAgentInstance, instrument_agent_instance_id)
 
-    def link_assignment(self, instrument_device_id='', logical_instrument_id=''):
-        return self._link_resources_single_object(instrument_device_id, PRED.hasAssignment, logical_instrument_id)
-
-    def unlink_assignment(self, instrument_device_id='', logical_instrument_id=''):
-        return self._unlink_resources(instrument_device_id, PRED.hasAssignment, logical_instrument_id)
-
     def link_deployment(self, instrument_device_id='', logical_instrument_id=''):
         return self._link_resources_single_object(instrument_device_id, PRED.hasDeployment, logical_instrument_id)
 
@@ -91,12 +85,6 @@ class InstrumentDeviceImpl(ResourceImpl):
 
     def unlink_model(self, instrument_device_id='', instrument_model_id=''):
         return self._unlink_resources(instrument_device_id, PRED.hasModel, instrument_model_id)
-
-    def link_logicalmodel(self, logical_instrument_id='', instrument_model_id=''):
-        return self._link_resources_single_object(logical_instrument_id, PRED.hasModel, instrument_model_id)
-
-    def unlink_logicalmodel(self, logical_instrument_id='', instrument_model_id=''):
-        return self._unlink_resources(logical_instrument_id, PRED.hasModel, instrument_model_id)
 
     def link_sensor(self, instrument_device_id='', sensor_device_id=''):
         return self._link_resources(instrument_device_id, PRED.hasSensor, sensor_device_id)

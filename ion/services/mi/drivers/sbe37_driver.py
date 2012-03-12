@@ -580,7 +580,7 @@ class SBE37Protocol(CommandResponseInstrumentProtocol):
         result = None
 
         try:
-            InstrumentProtocol.connect(self, *args, **kwargs)
+            result = InstrumentProtocol.connect(self, *args, **kwargs)
             timeout = kwargs.get('timeout', 10)
             prompt = self._wakeup(timeout)
             if prompt == SBE37Prompt.COMMAND:
@@ -626,9 +626,7 @@ class SBE37Protocol(CommandResponseInstrumentProtocol):
         result = None
         
         try:
-            mi_logger.info('DISCONNECTING')
             InstrumentProtocol.disconnect(self, *args, **kwargs)
-            mi_logger.info('DONE DISCONNECTING')
             next_state = SBE37State.DISCONNECTED
 
         except InstrumentConnectionException:
@@ -864,9 +862,8 @@ class SBE37Protocol(CommandResponseInstrumentProtocol):
             return
         
         if len(data)>0:
-            CommandResponseInstrumentProtocol._got_data(self, data)
-            mi_logger.debug('got data: linebuf: %s', repr(self._linebuf))
-            # Only keep the latest characters in the prompt buffer.
+            CommandResponseInstrumentProtocol._got_data(self, data)                        
+                        
             if len(self._promptbuf)>7:
                 self._promptbuf = self._promptbuf[-7:]
                 
@@ -892,12 +889,10 @@ class SBE37Protocol(CommandResponseInstrumentProtocol):
         """
         """
         
-        mi_logger.info('start updating params')
-        
         timeout = kwargs.get('timeout', 10)
         old_config = self._get_config_param_dict()
         self._do_cmd_resp('ds',timeout=timeout)
-        #self._do_cmd_resp('dc',timeout=timeout)
+        self._do_cmd_resp('dc',timeout=timeout)
         new_config = self._get_config_param_dict()            
         if new_config != old_config:
             if self.send_event:
@@ -906,7 +901,6 @@ class SBE37Protocol(CommandResponseInstrumentProtocol):
                     'value' : new_config
                 }
                 self.send_event(event)
-                
         mi_logger.info('done updating params')
         
     def _build_simple_command(self, cmd):

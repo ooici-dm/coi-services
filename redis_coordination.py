@@ -6,26 +6,23 @@
 @author Luke Campbell
 @author Swarbhanu Chatterjee
 
-To Run:
-@todo - fill this in!
+
 '''
 
-
 import gevent
-
 import redis
-import random
 from uuid import uuid4
-import time
 
 
-class RedisCoordination(object):
-
-    def __init__(self, rserver=None, name='', block_size=50, timeout=10, packet=None, log_id=None):
+class RedisCoordination(list):
+    """
+    This module provides the ability to coordinate distributed state between an arbitrary number of workers about a fixed
+    number of packets received between them. It provides for fault tolerant recovery from errors during processing of that
+    data.
+    """
+    def __init__(self, rserver=None, name='', block_size=50, timeout=10, packet=None):
 
         self._item = packet # A packet - the set of which we are trying to coordinate
-
-        self._id = log_id
 
         self._rserver = rserver # The redis connection
 
@@ -41,8 +38,6 @@ class RedisCoordination(object):
 
         self._my_backup_list_name = None
 
-        self._packet_block = []
-
 
 
     def __enter__(self ):
@@ -57,32 +52,30 @@ class RedisCoordination(object):
     def __exit__(self, type, value, traceback):
         # cleanup and deal with any exception thrown during processing
 
-        # push the temprary list back to the main list
         self.timeout.cancel()
 
         if self._my_backup_list_name is not None:
             if value is None:
-                # No exception raised
+                ### No exception raised - remove the backup list of values we just processed
+
                 #print '(ID:%s) EXIT: Cleaning up my backup list from set: %s' % (self._id, self._my_backup_list_name)
                 self._rserver.delete(self._my_backup_list_name)
 
             else:
-                # Exception raised - tell others about the backup list and abort!
-                print '(ID:%s) EXIT: Raise exception %s; Saving backup list name: %s' % (self._id, value, self._my_backup_list_name)
+                ### Exception raised - tell others about the backup list and abort!
+
+                #print '(ID:%s) EXIT: Raise exception %s; Saving backup list name: %s' % (self._id, value, self._my_backup_list_name)
                 self._rserver.sadd(self._backups_set_name, self._my_backup_list_name)
 
-    def __iter__(self):
-        for item in self._packet_block:
-            yield item
-
-
     def _safe_lpush_item_rpop_range(self):
-        # Coordination to get the range when the list is full goes here
+        ### Coordination to get the range when the list is full goes here
 
         #########
         # An error or network interruption occurring within the following block of code can cause problems!
         # =====================================
         current_length = self._rserver.lpush(self._list_name, self._item)
+
+        ### If we added the item that fills a block size, take those values and process them
         if current_length % self._block_size == 0:
             queue_name = str(uuid4())[:13]
             self._my_backup_list_name = '%s.%s.list' % (self._base_name, queue_name)
@@ -90,21 +83,21 @@ class RedisCoordination(object):
             with self._rserver.pipeline() as pipe:
 
                 pipe.multi()
-                for i in xrange(self._block_size): 
+                for i in xrange(self._block_size):
                     pipe.rpoplpush(self._list_name, self._my_backup_list_name)
 
-                self._packet_block = pipe.execute()
+                self.extend(pipe.execute())
         # =====================================
 
 
 
         else:
-            # Check for backup lists that need to be handled
+            ### The main list is not full, check for backup lists that need to be handled due to previous failure.
 
             self._my_backup_list_name = self._rserver.spop(self._backups_set_name)
 
             if self._my_backup_list_name:
-                self._packet_block = self._rserver.lrange(self._my_backup_list_name, 0, -1)
+                self.extend(self._rserver.lrange(self._my_backup_list_name, 0, -1))
 
-                print '(ID:%s) Got backup list name: %s; contents: %s' % (self._id, self._my_backup_list_name, self._packet_block)
+                #print '(ID:%s) Got backup list name: %s; contents: %s' % (self._id, self._my_backup_list_name, self)
 

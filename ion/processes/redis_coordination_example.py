@@ -19,15 +19,15 @@ from pyon.ion.transform import TransformDataProcess
 from prototype.sci_data.stream_defs import ctd_stream_packet, SBE37_CDM_stream_definition, ctd_stream_definition
 import redis
 from interface.services.dm.ipubsub_management_service import PubsubManagementServiceClient
-from interface.objects import ProcessDefinition, StreamQuery
+from prototype.sci_data.constructor_apis import PointSupplementConstructor
 from pyon.service.service import BaseService
-
-import redis
-from uuid import uuid4
 import gevent
+import time
+import random
+import uuid
 
 
-class RedisCoordinationExample(TransformDataProcess):
+class RedisCoordinationTransform(TransformDataProcess):
     ''' A basic transform that receives input through a subscription,
     parses the input for an integer and adds 1 to it. If the transform
     has an output_stream it will publish the output on the output stream.
@@ -35,94 +35,53 @@ class RedisCoordinationExample(TransformDataProcess):
     This transform appends transform work in 'FS.TEMP/transform_output'
     '''
     def __init__(self, *args, **kwargs):
-        super(RedisCoordinationExample,self).__init__()
-
-        self.dataset_name = 'dataset1'
+        super(RedisCoordinationTransform,self).__init__()
 
 
-    def process(self):
+    def on_start(self):
         # with redis coordination....
 
-        dsets = 1 # number of datasets
+        self.COMPARE_SET = 'compareset'
 
-        dset_max_size = 15 # Number of elements to put in the list before aggregation and chop
-
-
-        data_points = dset_max_size * 10
-
-
-        COMPARESET = 'compareset'
-
-        rserver = redis.StrictRedis(host='localhost', port=6379, db=0)
-
-        #-----------------------
-        # Set up subscribers
-        #-----------------------
-
-        exchange_name = "redis_queue"
-
-        query = ExchangeQuery()
-
-        subscription_id = self.pubsub_cli.create_subscription(query,
-            exchange_name,
-            "SampleExchangeSubscription",
-            "Sample Exchange Subscription Description")
+        self.conn = redis.StrictRedis('localhost', db=0)
 
 
 
-        def message_received(message, headers):
+    def process(self, packet):
 
-            print("message received: %s" % message )
 
-            with RedisCoordination(rserver=rserver, name=self.dataset_name, block_size=dset_max_size, timeout=15 ) as coordinator:
+        salt = random.normalvariate(mu=0,sigma=1)
 
-                packet_block = coordinator.safe_lpush_item_rpop_range(new_data)
+        try:
+            with RedisCoordination(rserver=self.conn, block_size=None, name='foo', timeout=None, packet=packet, log_id=None) as coordinator:
 
-                ###  Raise an exception here to test failure!
+                for item in coordinator:
+                    #if salt > 2.0:
+                    #    time.sleep(1.0)
+                    # a timeout here is just another kind of exception...
 
-                if packet_block:
+                    if salt < -2.0:
+                        raise Exception('I suck')
 
-                    for datum in packet_block:
-                        result = rserver.srem(COMPARESET,datum)
+                    result = self.conn.srem(self.COMPARE_SET, item)
 
-                        assert result == 1
+                    print("RedisCoordinationTransform removed from %s, the item, %s" % (self.COMPARE_SET, item))
 
-        subscriber_registrar = StreamSubscriberRegistrar(process=cc, node=cc.node)
-        subscriber = subscriber_registrar.create_subscriber(exchange_name=exchange_name, callback=message_received)
+                    if not result:
+                        print 'ERROR IN COMPARISON!!!! Tried to remove data that was not there!'
 
-        # Start subscribers
-        subscriber.start()
+        except:
+            # Keep running the test......
+            pass
 
-        # Activate subscriptions
-        pubsub_cli.activate_subscription(subscription_id)
 
-        #-------------------------------------------
-        # Set up publisher
-        #-------------------------------------------
 
-        redis_publisher =  RedisDataPublisher()
-
-        for i in xrange(data_points):
-
-            print("inside loop")
-
-            new_data = str(uuid4())
-
-            # For comparison purposes - to make sure we got everything
-            new_vals = rserver.sadd(COMPARESET, new_data)
-
-            redis_publisher._publish(new_data)
-
-        subscriber.stop()
-
-class RedisDataPublisher(StandaloneProcess):
+class RedisCoordinationPublisher(StandaloneProcess):
     def __init__(self, *args, **kwargs):
         super(StandaloneProcess, self).__init__(*args,**kwargs)
         #@todo Init stuff
 
-        print("Data publisher initialized")
-
-        outgoing_stream_def = SBE37_CDM_stream_definition()
+    outgoing_stream_def = SBE37_CDM_stream_definition()
 
 
     def on_start(self):
@@ -134,29 +93,41 @@ class RedisDataPublisher(StandaloneProcess):
           in my_output_stream_id
         '''
 
+        self.conn = redis.StrictRedis('localhost', db=0)
+        self.COMPARE_SET = 'compareset'
+
         # Get the stream(s)
-
-        pubsub_cli = PubsubManagementServiceClient(node=cc.node)
-
-        stream_id = pubsub_cli.create_stream()
+        stream_id = self.CFG.get_safe('process.stream_id',{})
 
         self.greenlet_queue = []
 
-
-        self.stream_publisher_registrar = StreamPublisherRegistrar(process=self,node=cc.node)
+        self.stream_publisher_registrar = StreamPublisherRegistrar(process=self,node=self.container.node)
         # Needed to get the originator's stream_id
         self.stream_id= stream_id
 
 
         self.publisher = self.stream_publisher_registrar.create_publisher(stream_id=stream_id)
 
+
+        g = Greenlet(self._trigger_func, stream_id)
+        log.debug('Starting publisher thread for simple ctd data.')
+        g.start()
+        self.greenlet_queue.append(g)
+
     def on_quit(self):
+        for greenlet in self.greenlet_queue:
+            greenlet.kill()
+        super(RedisCoordinationPublisher,self).on_quit()
 
-        super(RedisDataPublisher,self).on_quit()
+    def _trigger_func(self, stream_id):
 
+        while True:
 
-    def _publish(self, msg):
+            datum = str(uuid.uuid4())
 
-        print("publishing message: %s" % msg)
+            self.conn.sadd(self.COMPARE_SET, datum)
 
-        self.publisher.publish(msg)
+            log.warn('RedisCoordinationPublisher sending: %s\n' % datum)
+            self.publisher.publish(datum)
+
+            time.sleep(2.0)

@@ -106,12 +106,8 @@ class RedisCoordinationPublisher(StandaloneProcess):
         self.greenlet_queue = []
 
         self.stream_publisher_registrar = StreamPublisherRegistrar(process=self,node=self.container.node)
-        # Needed to get the originator's stream_id
-        self.stream_id= stream_id
-
 
         self.publisher = self.stream_publisher_registrar.create_publisher(stream_id=stream_id)
-
 
         g = Greenlet(self._trigger_func, stream_id)
         log.debug('Starting publisher thread for simple ctd data.')
@@ -131,7 +127,7 @@ class RedisCoordinationPublisher(StandaloneProcess):
 
             self.conn.sadd(self.COMPARE_SET, datum)
 
-            packet_dict = {'name' : 'coordinator_name', 'value' : datum}
+            packet_dict = {'name' : stream_id, 'value' : datum}
 
             log.warn('RedisCoordinationPublisher sending: %s\n' % packet_dict)
             self.publisher.publish(packet_dict)

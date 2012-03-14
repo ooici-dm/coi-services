@@ -47,7 +47,7 @@ class RedisPublisher(StandaloneProcess):
 
         log.warn("num of stream_ids: %d" % len(stream_ids))
 
-        stream_id = stream_ids[random.randint(1,len(stream_ids)-1)]
+        stream_id = stream_ids[random.randint(0,len(stream_ids)-1)]
         log.warn("chose the random stream, %s, to publish on!" % stream_id)
 
         #------------------------------------------------------------------------

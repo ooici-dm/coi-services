@@ -18,7 +18,7 @@ class RedisTransform(StandaloneProcess):
         rr_cli = ResourceRegistryServiceClient(node=self.container.node)
 
         #----------------------------------------------------------------------------------
-        # Find the exchange subscriptions
+        # Find the exchange subscription
         #----------------------------------------------------------------------------------
 
         subscription_tuples =  rr_cli.find_resources(RT.Subscription)

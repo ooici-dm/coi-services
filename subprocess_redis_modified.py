@@ -18,6 +18,7 @@ if __name__ == '__main__':
 
     subprocess_pool = list()
     open_files = list()
+    start =0
 
     #------------------------------------------------------------------------
     # To launch services
@@ -25,7 +26,7 @@ if __name__ == '__main__':
 
     pool_size = 1
     for i in xrange(pool_size):
-        print 'starting subprocess (all services) %d' % i
+        print 'starting subprocess (all services: r2dm.yml) %d' % i
         job = 'bin/pycc'
 
         arg = '--rel res/deploy/r2dm.yml'
@@ -39,13 +40,15 @@ if __name__ == '__main__':
 
         subprocess_pool.append(subprocess.Popen(proc, shell=False, stdout=out, stderr=out))
 
+        start = i + 1
+
     #------------------------------------------------------------------------
     # To launch streams
     #------------------------------------------------------------------------
 
     pool_size = 1
-    for i in xrange(pool_size):
-        print 'starting subprocess (stream launcher) %d' % i
+    for i in xrange(start, start + pool_size):
+        print 'starting subprocess (redis_stream_launcher) %d' % i
         job = 'bin/pycc'
 
         arg = '--rel res/deploy/examples/redis_stream_launcher.yml'
@@ -59,36 +62,43 @@ if __name__ == '__main__':
 
         subprocess_pool.append(subprocess.Popen(proc, shell=False, stdout=out, stderr=out))
 
-#    #------------------------------------------------------------------------
-#    # To launch redis coordination publishers
-#    #------------------------------------------------------------------------
-#
-#    pool_size = 20
-#    for i in xrange(pool_size):
-#        print 'starting subprocess %d' % i
-#        job = 'bin/pycc'
-#
-#        arg = '--rel res/deploy/r2dm.yml'
-#
-#        proc = [job, arg]
-#        if i==1:
-#            proc.append('1')
-#        f = open('/tmp/g%s'%i, 'w')
-#        out = f.fileno()
-#        open_files.append(f)
-#
-#        subprocess_pool.append(subprocess.Popen(proc, shell=False, stdout=out, stderr=out))
+        start = i + 1
+
+    #------------------------------------------------------------------------
+    # To launch redis coordination publishers
+    #------------------------------------------------------------------------
+
+    pool_size = 20
+    for i in xrange(start,start + pool_size):
+        print 'starting subprocess (redis_publisher) %d' % i
+        job = 'bin/pycc'
+
+        arg = '--rel res/deploy/examples/redis_publisher.yml'
+
+        proc = [job, arg]
+        if i==1:
+            proc.append('1')
+        f = open('/tmp/g%s'%i, 'w')
+        out = f.fileno()
+        open_files.append(f)
+
+        subprocess_pool.append(subprocess.Popen(proc, shell=False, stdout=out, stderr=out))
+
+        start = i + 1
+
+
 #
 #    #------------------------------------------------------------------------
 #    # To launch redis coordination consumers (transforms)
 #    #------------------------------------------------------------------------
 #
+#
 #    pool_size = 20
-#    for i in xrange(pool_size):
-#        print 'starting subprocess %d' % i
+#    for i in xrange(start + 1 , pool_size):
+#        print 'starting subprocess (redis_transform) %d' % i
 #        job = 'bin/pycc'
 #
-#        arg = '--rel res/deploy/r2dm.yml'
+#        arg = '--rel res/deploy/examples/redis_transform.yml'
 #
 #        proc = [job, arg]
 #        if i==1:
@@ -98,6 +108,8 @@ if __name__ == '__main__':
 #        open_files.append(f)
 #
 #        subprocess_pool.append(subprocess.Popen(proc, shell=False, stdout=out, stderr=out))
+#
+#        start = i
 
     #------------------------------------------------------------------------
     # Launch all the above processes

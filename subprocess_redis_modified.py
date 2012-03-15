@@ -63,7 +63,7 @@ if __name__ == '__main__':
     #------------------------------------------------------------------------
 
     counter = 2
-    pool_size = 2
+    pool_size = 1
     for i in xrange(counter,counter + pool_size):
         print 'starting subprocess (redis_publisher) %d' % i
         job = 'bin/pycc'
@@ -85,7 +85,7 @@ if __name__ == '__main__':
     counter += pool_size
     print ("counter: %d" % counter)
 
-    pool_size = 2
+    pool_size = 1
     for i in xrange(counter, counter + pool_size):
         print 'starting subprocess (redis_transform) %d' % i
         job = 'bin/pycc'
@@ -104,11 +104,13 @@ if __name__ == '__main__':
     # Wait for processes to end and then kill them
     #------------------------------------------------------------------------
 
-    for process in subprocess_pool:
+#    for process in subprocess_pool:
+#        process.wait()
 
-        process.wait()
-    for f in open_files:
-        f.close()
+#    time.sleep(40)
+#
+#    for f in open_files:
+#        f.close()
 
 #    for process in subprocess_pool:
 #        process.kill()

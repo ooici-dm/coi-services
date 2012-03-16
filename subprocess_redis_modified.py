@@ -27,7 +27,7 @@ if __name__ == '__main__':
     print 'starting subprocess (all services: r2dm.yml)'
     job = 'bin/pycc'
 
-    arg = '--rel res/deploy/r2dm.yml'
+    arg = '--rel res/deploy/r2dm.yml -n'
 
     proc = [job, arg]
 
@@ -46,7 +46,7 @@ if __name__ == '__main__':
     print 'starting subprocess (redis_stream_launcher)'
     job = 'bin/pycc'
 
-    arg = '--rel res/deploy/examples/redis_stream_launcher.yml'
+    arg = '--rel res/deploy/examples/redis_stream_launcher.yml -n'
 
     proc = [job, arg]
 
@@ -68,7 +68,7 @@ if __name__ == '__main__':
         print 'starting subprocess (redis_publisher) %d' % i
         job = 'bin/pycc'
 
-        arg = '--rel res/deploy/examples/redis_publisher.yml'
+        arg = '--rel res/deploy/examples/redis_publisher.yml -n'
 
         proc = [job, arg]
 
@@ -90,7 +90,7 @@ if __name__ == '__main__':
         print 'starting subprocess (redis_transform) %d' % i
         job = 'bin/pycc'
 
-        arg = '--rel res/deploy/examples/redis_transform.yml'
+        arg = '--rel res/deploy/examples/redis_transform.yml -n'
 
         proc = [job, arg]
 

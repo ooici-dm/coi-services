@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Launch all services
+bin/pycc --rel res/deploy/r2dm.yml -n &
+sleep 4
+
+# Launch the stream_launcher
+bin/pycc --rel res/deploy/examples/redis_stream_launcher.yml -n &
+
+sleep 5
+
+# Launch the publishers
+for((i=0;i<2;i++));
+do
+bin/pycc --rel res/deploy/examples/redis_publisher.yml -n &
+done
+
+# Launch the transforms
+
+for((i=0;i<2;i++));
+do
+bin/pycc --rel res/deploy/examples/redis_transform.yml -n &
+done
+
+echo "finally!"

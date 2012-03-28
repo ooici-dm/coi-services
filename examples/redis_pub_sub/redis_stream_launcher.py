@@ -31,7 +31,7 @@ class RedisStreamLauncher(StandaloneProcess):
         #----------------------------------------
 
         #----------------------------------------------------------------------------------
-        # Create a subscriber. Get the datum from a the published stream
+        # Create a subscription. Get the datum from a the published stream
         #----------------------------------------------------------------------------------
 
         # listen to a stream_id....

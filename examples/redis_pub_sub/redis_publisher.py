@@ -12,40 +12,26 @@ class RedisPublisher(StandaloneProcess):
         pass
     def on_start(self):
 
-        process_dispatcher = ProcessDispatcherServiceClient(node=self.container.node)
+        #process_dispatcher = ProcessDispatcherServiceClient(node=self.container.node)
         rr_cli = ResourceRegistryServiceClient(node=self.container.node)
 
 
-        producer_definition = ProcessDefinition()
-        producer_definition.executable = {
-            'module':'ion.processes.redis_coordination_example',
-            'class':'RedisCoordinationPublisher'
-        }
+        #producer_definition = ProcessDefinition()
+        #producer_definition.executable = {
+        #    'module':'ion.processes.redis_coordination_example',
+        #    'class':'RedisCoordinationPublisher'
+        #}
 
-        producer_procdef_id = process_dispatcher.create_process_definition(process_definition=producer_definition)
+        #producer_procdef_id = process_dispatcher.create_process_definition(process_definition=producer_definition)
 
 
         #------------------------------------------------------------------------
         # Find streams in the system and choose one at random to publish on
         #------------------------------------------------------------------------
 
-        streams =  rr_cli.find_resources(RT.Stream)
+        stream_ids, _ =  rr_cli.find_resources(RT.Stream, id_only=True)
 
         log.warn("redis_publisher found streams")
-
-        stream_ids = []
-
-        for stream_dict in streams[1]:
-
-            log.warn("type of streams: %s" % type(stream_dict))
-
-            log.warn("streams.id: %s" % stream_dict['id'])
-
-            stream_ids.append(stream_dict['id'])
-
-        # choose a random stream:
-
-        log.warn("num of stream_ids: %d" % len(stream_ids))
 
         stream_id = stream_ids[random.randint(0,len(stream_ids)-1)]
         log.warn("chose the random stream, %s, to publish on!" % stream_id)
@@ -60,6 +46,9 @@ class RedisPublisher(StandaloneProcess):
                 }
         }
 
-        ctd_pid = process_dispatcher.schedule_process(process_definition_id=producer_procdef_id, configuration=configuration)
+        #ctd_pid = process_dispatcher.schedule_process(process_definition_id=producer_procdef_id, configuration=configuration)
 
-        log.warn("post schedule process. ctd_pid: %s" % ctd_pid)
+        pid = self.container.spawn_process('redis_publisher', 'ion.processes.redis_coordination_example', 'RedisCoordinationPublisher', configuration)
+
+
+        #log.warn("post schedule process. ctd_pid: %s" % ctd_pid)

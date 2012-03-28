@@ -35,5 +35,6 @@ setup(  name = 'coi-services',
             'requests',
             'seawater',
             'redis'
+            'matplotlib==1.1.0'
         ],
      )

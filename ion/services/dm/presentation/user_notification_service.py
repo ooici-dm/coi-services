@@ -4,22 +4,39 @@ __author__ = 'Bill Bollenbacher'
 __license__ = 'Apache 2.0'
 
 
-from pyon.util.log import log
-from interface.services.dm.iuser_notification_service import BaseUserNotificationService
-from pyon.public import RT, PRED, sys_name, Container, CFG
-from pyon.core.exception import BadRequest, NotFound
-from pyon.event.event import EventError, EventSubscriber, EventRepository
-from pyon.util.async import spawn
-from gevent import Greenlet
 import string, smtplib, time
 from datetime import datetime
 from email.mime.text import MIMEText
+from gevent import Greenlet
+
+from pyon.core.exception import BadRequest, NotFound
+from pyon.event.event import EventError, EventSubscriber, EventPublisher
+from pyon.public import RT, PRED, get_sys_name, Container, CFG, IonObject
+from pyon.util.async import spawn
+from pyon.util.log import log
+
+from interface.services.dm.iuser_notification_service import BaseUserNotificationService
 
 # the 'from' email address for notification emails
 ION_NOTIFICATION_EMAIL_ADDRESS = 'ION_notifications-do-not-reply@oceanobservatories.org'
 # the default smtp server
 ION_SMTP_SERVER = 'mail.oceanobservatories.org'
 
+"""
+For every user that has existing notification requests (who has called create_notification()) the UNS will contain a local 
+UserEventProcessor instance that contains the user's notification information (email address) and all of the user's 
+notifications (along with their event subscribers).  The UserEventProcessors are maintained local to the UNS in a dictionary 
+indexed by the user's resourceID.  When a notification is created the user's UserEventProcessor will be created if it 
+doesn't already exist , and it will be deleted when the user deletes their last notification.
+
+The user's UserEventProcessor will encapsulate a list of notification objects that the user has requested, 
+along with user information needed for send notifications (email address for LCA).  
+It will also encapsulate a subscriber callback method that is passed to all event subscribers for each notification 
+the user has created.
+
+Each notification object will encapsulate the notification information and a list of event subscribers (only one for LCA) 
+that listen for the events in the notification.
+"""
 
 class NotificationEventSubscriber(EventSubscriber):
     # encapsulates the event subscriber and the event 'listen loop' greenlet
@@ -27,8 +44,7 @@ class NotificationEventSubscriber(EventSubscriber):
     
     def __init__(self, origin=None, event_type=None, callback=None):
         self.listener_greenlet = None
-        subscriber_event_type = event_type.upper() + "_EVENT"
-        self.subscriber = EventSubscriber(origin=origin, event_type=subscriber_event_type, callback=callback)
+        self.subscriber = EventSubscriber(origin=origin, event_type=event_type, callback=callback)
         
     def start_listening(self):
         self.listener_greenlet = spawn(self.subscriber.listen)
@@ -100,7 +116,7 @@ class UserEventProcessor(object):
                             "To modify or remove notifications about this event, please access My Notifications Settings in the ION Web UI.",
                             "Do not reply to this email.  This email address is not monitored and the emails will not be read."), 
                            "\r\n")
-        SUBJECT = "(SysName: " + sys_name + ") ION event " + event + " from " + origin
+        SUBJECT = "(SysName: " + get_sys_name() + ") ION event " + event + " from " + origin
         FROM = ION_NOTIFICATION_EMAIL_ADDRESS
         TO = self.user_email_addr
         msg = MIMEText(BODY)
@@ -365,5 +381,19 @@ class UserNotificationService(BaseUserNotificationService):
         log.debug("UserNotificationService.find_event_types_for_resource(): resource type %s not an event originator" %resource_type)
         return []
 
+    def generate_event(self, event_type='Event', origin='', origin_type='', event_fields=None, sub_type='', description=''):
+        try:
+            event_obj = IonObject(event_type)
+        except Exception:
+            raise NotFound("Event type %s unknown" % event_type)
 
-  
+        if not origin or type(origin) is not str:
+            raise BadRequest("Argument value of origin illegal")
+        if event_fields and type(event_fields) is not dict:
+            raise BadRequest("Argument value of event_fields illegal")
+
+        pub = EventPublisher()
+        event_fields = event_fields or {}
+        success = pub.publish_event(event_type=event_type, sub_type=sub_type, origin=origin, description=description, **event_fields)
+        if not success:
+            raise BadRequest("Cannot publish event")

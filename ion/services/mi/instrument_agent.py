@@ -17,8 +17,10 @@ from pyon.agent.agent import ResourceAgent
 from pyon.core import exception as iex
 from pyon.util.containers import get_ion_ts
 from pyon.ion.endpoint import StreamPublisherRegistrar
+from pyon.event.event import EventPublisher
 
 import time
+import socket
 
 from ion.services.mi.instrument_fsm_args import InstrumentFSM
 from ion.services.mi.common import BaseEnum
@@ -26,7 +28,7 @@ from ion.services.mi.common import InstErrorCode
 from ion.services.mi.zmq_driver_client import ZmqDriverClient
 from ion.services.mi.zmq_driver_process import ZmqDriverProcess
 from ion.services.sa.direct_access.direct_access_server import DirectAccessServer, DirectAccessTypes
-
+from pyon.util.containers import get_safe
 
 class InstrumentAgentState(BaseEnum):
     """
@@ -74,16 +76,23 @@ class InstrumentAgent(ResourceAgent):
     common resource interface, point of publication) and creates
     a driver process to specialize for particular hardware.
     """
+
+    # Override to publish specific types of events
+    COMMAND_EVENT_TYPE = "DeviceCommandEvent"
+    # Override to set specific origin type
+    ORIGIN_TYPE = "InstrumentDevice"
+
     def __init__(self, initial_state=InstrumentAgentState.UNINITIALIZED):
         """
         Initialize instrument agent prior to pyon process initialization.
         Define state machine, initialize member variables.
         """
+        log.debug("InstrumentAgent.__init__: initial_state = <" + str(initial_state) + ">" )
         ResourceAgent.__init__(self)
                 
         # Instrument agent state machine.
         self._fsm = InstrumentFSM(InstrumentAgentState, InstrumentAgentEvent, InstrumentAgentEvent.ENTER,
-                            InstrumentAgentEvent.EXIT, InstErrorCode.UNHANDLED_EVENT)
+                                  InstrumentAgentEvent.EXIT, InstErrorCode.UNHANDLED_EVENT, self._log_state_change_event)
         
         # Populate state machine for all state-events.
         self._fsm.add_handler(InstrumentAgentState.POWERED_DOWN, InstrumentAgentEvent.ENTER, self._handler_powered_down_enter)
@@ -217,6 +226,10 @@ class InstrumentAgent(ResourceAgent):
         Init objects that depend on the container services and start state
         machine.
         """
+        resource_id = get_safe(self.CFG, "agent.resource_id")
+        if not self.resource_id:
+            log.warn("InstrumentAgent.on_init(): agent has no resource_id in configuration")
+                
         # The registrar to create publishers.
         self._stream_registrar = StreamPublisherRegistrar(process=self,
                                                     node=self.container.node)
@@ -539,7 +552,6 @@ class InstrumentAgent(ResourceAgent):
         """
         log.info('Instrument agent entered state %s',
                  self._fsm.get_current_state())
-
     
     def _handler_inactive_exit(self,  *args, **kwargs):
         """
@@ -833,14 +845,29 @@ class InstrumentAgent(ResourceAgent):
         next_state = None
         
         log.info("Instrument agent requested to go to direct access mode")
-        # tell driver to start direct access mode
-        result = self._dvr_client.cmd_dvr('start_direct_access')
+        
+        # get 'address' of host
+        hostname = socket.gethostname()
+        log.debug("hostname = " + hostname)        
+        ip_addresses = socket.gethostbyname_ex(hostname)
+        log.debug("ip_address=" + str(ip_addresses))
+        ip_address = ip_addresses[2][0]
+        ip_address = hostname
         # create a DA server instance (TODO: just telnet for now) and pass in callback method
-        self.da_server = DirectAccessServer(DirectAccessTypes.telnet, self.telnet_input_processor)
-        # get the connection info from the DA server
-        addr, port, name, password = self.da_server.get_connection_info()
-        result = {'ip_address':addr, 'port':port, 'username':name, 'password':password}
+        try:
+            self.da_server = DirectAccessServer(DirectAccessTypes.telnet, self.telnet_input_processor, ip_address)
+        except Exception as ex:
+            log.warning("InstrumentAgent: failed to start DA Server <%s>" %str(ex))
+            raise ex
+
+        # get the connection info from the DA server to return to the user
+        port, token = self.da_server.get_connection_info()
+        result = {'ip_address':ip_address, 'port':port, 'token':token}
         next_state = InstrumentAgentState.DIRECT_ACCESS
+
+        # tell driver to start direct access mode
+        self._dvr_client.cmd_dvr('start_direct_access')
+        
         return (next_state, result)
 
     def _handler_get_params(self, params, *args, **kwargs):
@@ -950,7 +977,7 @@ class InstrumentAgent(ResourceAgent):
         Handler upon direct access entry.
         """
         log.info('Instrument agent entered state %s',
-                 self._fsm.get_current_state())
+            self._fsm.get_current_state())
     
     def _handler_direct_access_exit(self,  *args, **kwargs):
         """
@@ -1019,7 +1046,7 @@ class InstrumentAgent(ResourceAgent):
             
         except (TypeError, KeyError):
             # Not a dict. or missing required parameter.
-            log.error('Insturment agent %s missing required parameter in start_driver.',
+            log.error('Instrument agent %s missing required parameter in start_driver.',
                       self._proc_name)            
             return InstErrorCode.REQUIRED_PARAMETER
                 
@@ -1030,22 +1057,22 @@ class InstrumentAgent(ResourceAgent):
         self._dvr_proc.poll()
         if self._dvr_proc.returncode:
             # Error proc didn't start.
-            log.error('Insturment agent %s driver process did not launch.',
+            log.error('Instrument agent %s driver process did not launch.',
                       self._proc_name)
             return InstErrorCode.AGENT_INIT_FAILED
 
-        log.info('Insturment agent %s launched driver process.', self._proc_name)
+        log.info('Instrument agent %s launched driver process.', self._proc_name)
         
         # Create client and start messaging.
         self._dvr_client = ZmqDriverClient(svr_addr, cmd_port, evt_port)
         self._dvr_client.start_messaging(self.evt_recv)
-        log.info('Insturment agent %s driver process client started.',
+        log.info('Instrument agent %s driver process client started.',
                  self._proc_name)
         time.sleep(1)
 
         try:        
             retval = self._dvr_client.cmd_dvr('process_echo', 'Test.')
-            log.info('Insturment agent %s driver process echo test: %s.',
+            log.info('Instrument agent %s driver process echo test: %s.',
                      self._proc_name, str(retval))
             
         except Exception:
@@ -1053,12 +1080,12 @@ class InstrumentAgent(ResourceAgent):
             self._dvr_proc.wait()
             self._dvr_proc = None
             self._dvr_client = None
-            log.error('Insturment agent %s error commanding driver process.',
+            log.error('Instrument agent %s error commanding driver process.',
                       self._proc_name)            
             return InstErrorCode.AGENT_INIT_FAILED
 
         else:
-            log.info('Insturment agent %s started its driver.', self._proc_name)
+            log.info('Instrument agent %s started its driver.', self._proc_name)
             self._construct_packet_factories(dvr_mod)
 
         return self._dvr_proc.pid
@@ -1074,7 +1101,7 @@ class InstrumentAgent(ResourceAgent):
             self._dvr_proc = None
             self._dvr_client = None
             self._clear_packet_factories()
-            log.info('Insturment agent %s stopped its driver.', self._proc_name)
+            log.info('Instrument agent %s stopped its driver.', self._proc_name)
             
         time.sleep(1)
 
@@ -1134,6 +1161,16 @@ class InstrumentAgent(ResourceAgent):
         """
         self._packet_factories.clear()
         log.info('Instrument agent %s deleted packet factories.', self._proc_name)
+        
+    def _log_state_change_event(self, state):
+        event_description = 'Instrument agent ' + self.resource_id + ' entered state ' + state
+        self._publish_instrument_agent_event(event_type='DeviceCommonLifecycleEvent',
+                                             description=event_description)
+        
+    def _publish_instrument_agent_event(self, event_type=None, description=None):
+        log.debug('Instrument agent %s publishing event %s:%s.' %(self._proc_name, event_type, description))
+        pub = EventPublisher(event_type=event_type)
+        pub.publish_event(origin=self.resource_id, description=description)
             
     ###############################################################################
     # Misc and test.

@@ -8,11 +8,10 @@
 and the relationships between them
 '''
 
-from pyon.core.exception import NotFound
-from pyon.public import CFG, IonObject, log, RT, PRED, LCS
+from pyon.core.exception import NotFound, BadRequest
+from pyon.public import CFG, IonObject, log, RT, PRED, LCS, LCE
 
-
-
+from pyon.util.log import log
 from ion.services.sa.resource_impl.logical_instrument_impl import LogicalInstrumentImpl
 from ion.services.sa.resource_impl.logical_platform_impl import LogicalPlatformImpl
 from ion.services.sa.resource_impl.marine_facility_impl import MarineFacilityImpl
@@ -127,8 +126,23 @@ class MarineFacilityManagementService(BaseMarineFacilityManagementService):
         delete a resource, including its history (for less ominous deletion, use retire)
         @param marine_facility_id the id of the object to be deleted
         @retval success whether it succeeded
-
         """
+        
+        # find the org for this MF
+        org_ids, _ = self.clients.resource_registry.find_subjects(RT.Org, PRED.hasObservatory, marine_facility_id, id_only=True)
+        if len(org_ids) == 0:
+            log.warn("MarineFacilityManagementService.delete_marine_facility(): no org for MF " + marine_facility_id)
+        else:
+            if len(org_ids) > 1:
+                log.warn("MarineFacilityManagementService.delete_marine_facility(): more than 1 org for MF " + marine_facility_id)
+                # TODO: delete the others and/or raise exception???
+            # delete the set of User Roles for this marine facility that this service created
+            self.clients.org_management.remove_user_role(org_ids[0], INSTRUMENT_OPERATOR_ROLE)
+            self.clients.org_management.remove_user_role(org_ids[0], OBSERVATORY_OPERATOR_ROLE)
+            self.clients.org_management.remove_user_role(org_ids[0], DATA_OPERATOR_ROLE)
+            # delete the org
+            self.clients.org_management.delete_org(org_ids[0])
+        
         return self.marine_facility.delete_one(marine_facility_id)
 
     def find_marine_facilities(self, filters=None):
@@ -141,6 +155,7 @@ class MarineFacilityManagementService(BaseMarineFacilityManagementService):
         """
 
         """
+        # find the org for this MF
         org_ids, _ = self.clients.resource_registry.find_subjects(RT.Org, PRED.hasObservatory, marine_facility_id, id_only=True)
         if len(org_ids) == 0:
             return ""
@@ -436,27 +451,6 @@ class MarineFacilityManagementService(BaseMarineFacilityManagementService):
     #     self.logical_instrument.unlink_data_product(logical_instrument_id, data_product_id)
 
 
-    # reassigning a logical instrument to an instrument device is a little bit special
-    # TODO: someday we may be able to dig up the correct data products automatically,
-    #       but once we have them this is the function that does all the work.
-    def reassign_instrument_device_to_logical_instrument(self, logical_instrument_id='',
-                                                         old_instrument_device_id='',
-                                                         new_instrument_device_id='',
-                                                         logical_data_product_ids=None,
-                                                         old_instrument_data_product_ids=None,
-                                                         new_instrument_data_product_ids=None):
-        """
-        associate a logical instrument with a physical one.  this involves linking the
-        physical instrument's data product(s) to the logical one(s).
-
-        the 2 lists of data products must be of equal length, and will map 1-1
-
-        @param logical_instrument_id
-        @param instrument_device_id
-        @param logical_data_product_ids a list of data products associated to a logical instrument
-        @param instrument_data_product_ids a list of data products coming from an instrument device
-        """
-
 
     def define_observatory_policy(self):
         """method docstring
@@ -516,8 +510,198 @@ class MarineFacilityManagementService(BaseMarineFacilityManagementService):
     #
     ############################
 
-    def find_subordinate_entity(self, parent_resource_id='', child_resource_type_list=[]):
-        return {}
+    # Helper methods
+    def find_subordinate_frames_of_reference(self, input_resource_id=''):
+        allowed_types = [RT.MarineFacility, RT.LogicalInstrument, RT.LogicalPlatform, RT.Site]
+        subordinates = {
+            RT.MarineFacility: [RT.LogicalInstrument, RT.LogicalPlatform, RT.Site],
+            RT.Site: [RT.LogicalInstrument, RT.LogicalPlatform],
+            RT.LogicalPlatform: [RT.LogicalInstrument],
+            RT.LogicalInstrument: []
+            }
+        input_obj  = self.RR.read(input_resource_id)
+        if not input_obj._get_type() in allowed_types:
+            raise BadRequest("input_resource_id refers to unexpected type")
+        return self.find_subordinate_entity(input_resource_id, subordinates[input_obj._get_type()])
+
+    def find_superior_frames_of_reference(self, input_resource_id=''):
+        allowed_types = [RT.MarineFacility, RT.LogicalInstrument, RT.LogicalPlatform, RT.Site]
+        superiors = {
+            RT.MarineFacility: [],
+            RT.Site: [RT.MarineFacility],
+            RT.LogicalPlatform: [RT.MarineFacility, RT.Site],
+            RT.LogicalInstrument: [RT.MarineFacility, RT.Site, RT.LogicalPlatform]
+            }
+        input_obj  = self.RR.read(input_resource_id)
+        if not input_obj._get_type() in allowed_types:
+            raise BadRequest("input_resource_id refers to unexpected type")
+        return self.find_subordinate_entity(input_resource_id, superiors[input_obj._get_type()])
+
+    def find_subordinate_entity(self, input_resource_id='', output_resource_type_list=[]):
+
+        # the relative depth of each resource type in our tree
+        depth = {RT.LogicalInstrument: 4,
+                 RT.LogicalPlatform: 3,
+                 RT.Site: 2,
+                 RT.MarineFacility: 1,
+                 }
+
+        input_obj  = self.RR.read(input_resource_id)
+        input_type = input_obj._get_type()
+
+        #input type checking
+        if not input_type in depth:
+            raise BadRequest("Input resource type (got %s) must be one of %s" % 
+                             (input_type, str(depth.keys())))
+        for t in output_resource_type_list:
+            if not t in depth:
+                raise BadRequest("Output resource types (got %s) must be one of %s" %
+                                 (str(output_resource_type_list), str(depth.keys())))
+
+                             
+
+        subordinates = [x for x in output_resource_type_list if depth[x] > depth[input_type]]
+        superiors    = [x for x in output_resource_type_list if depth[x] < depth[input_type]]
+
+        acc = {}
+        acc[input_type] = [input_obj]
+
+
+        if subordinates:
+            # figure out the actual depth we need to go
+            deepest_type = input_type #initial value
+            for output_type in output_resource_type_list:
+                if depth[deepest_type] < depth[output_type]:
+                    deepest_type = output_type
+
+            log.debug("Deepest level for search will be '%s'" % deepest_type)
+
+            acc = self._traverse_entity_tree(acc, input_type, deepest_type, True)
+
+
+        if superiors:
+            highest_type = input_type #initial value
+
+            for output_type in output_resource_type_list:
+                if depth[highest_type] > depth[output_type]:
+                    highest_type = output_type
+
+            log.debug("Highest level for search will be '%s'" % highest_type)
+
+            acc = self._traverse_entity_tree(acc, highest_type, input_type, False)
+
+        # Don't include input type in response            
+        if input_type in acc:
+            acc.pop(input_type)            
+        return acc
+                    
+
+    def _traverse_entity_tree(self, acc, top_type, bottom_type, downward):
+
+        call_list = self._build_call_list(top_type, bottom_type, downward)
+
+        # reverse the list and start calling functions
+        if downward:
+            call_list.reverse()
+            for (p, c) in call_list:
+                acc = self._find_subordinate(acc, p, c)
+        else:
+            for (p, c) in call_list:
+                acc = self._find_superior(acc, p, c)
+
+        return acc
+
+
+    def _build_call_list(self, top_type, bottom_type, downward):
+        # the possible parent types that a resource can have
+        hierarchy_dependencies =  {
+            RT.LogicalInstrument: [RT.LogicalPlatform],
+            RT.LogicalPlatform:  [RT.LogicalPlatform, RT.Site],
+            RT.Site:             [RT.Site, RT.MarineFacility],
+            }
+
+        call_list = []
+        target_type = bottom_type
+        while True:
+            if downward and (target_type == top_type):
+                return call_list
+
+            if (not downward) and (target_type == top_type):
+                if not (target_type in hierarchy_dependencies and
+                        target_type in hierarchy_dependencies[target_type]):
+                    return call_list
+
+            for requisite_type in hierarchy_dependencies[target_type]:
+                #should cause errors if they stray from allowed inputs
+                call_list.append((requisite_type, target_type))
+
+                if not downward and top_type == requisite_type == target_type:
+                    return call_list
+            
+            #latest solved type is the latest result
+            target_type = requisite_type
+        
+                
+            
+
+
+    def _find_subordinate(self, acc, parent_type, child_type):
+        """
+        acc is an accumulated dictionary
+        """
+        if not child_type in acc:
+            acc[child_type] = []
+            
+        find_fn = {
+            (RT.MarineFacility, RT.Site):               self.marine_facility.find_stemming_site,
+            (RT.Site, RT.Site):                         self.site.find_stemming_site,
+            (RT.Site, RT.LogicalPlatform):              self.site.find_stemming_platform,
+            (RT.LogicalPlatform, RT.LogicalPlatform):   self.logical_platform.find_stemming_platform,
+            (RT.LogicalPlatform, RT.LogicalInstrument): self.logical_platform.find_stemming_instrument,
+            }[(parent_type, child_type)]
+        
+        log.debug("Subordinates: '%s'x%d->'%s'" % (parent_type, len(acc[parent_type]), child_type))
+
+        #for all parents in the acc, add all their children
+        for parent_obj in acc[parent_type]:
+            parent_id = parent_obj._id
+            for child_obj in find_fn(parent_id):
+                acc[child_type].append(child_obj)
+
+        return acc
+
+
+
+
+    def _find_superior(self, acc, parent_type, child_type):
+        """
+        acc is an accumulated dictionary
+        """
+        if not parent_type in acc:
+            acc[parent_type] = []
+
+        #log.debug("Superiors: '%s'->'%s'" % (parent_type, child_type))
+        #if True:
+        #    return acc
+            
+        find_fn = {
+            (RT.MarineFacility, RT.Site):               self.marine_facility.find_having_site,
+            (RT.Site, RT.Site):                         self.site.find_having_site,
+            (RT.Site, RT.LogicalPlatform):              self.site.find_having_platform,
+            (RT.LogicalPlatform, RT.LogicalPlatform):   self.logical_platform.find_having_platform,
+            (RT.LogicalPlatform, RT.LogicalInstrument): self.logical_platform.find_having_instrument,
+            }[(parent_type, child_type)]
+        
+        log.debug("Superiors: '%s'->'%s'x%d" % (parent_type, child_type, len(acc[child_type])))
+
+        #for all children in the acc, add all their parents
+        for child_obj in acc[child_type]:
+            child_id = child_obj._id
+            for parent_obj in find_fn(child_id):
+                acc[parent_type].append(parent_obj)
+
+        return acc
+
 
     def find_instrument_device_by_logical_platform(self, logical_platform_id=''):
         ret = []

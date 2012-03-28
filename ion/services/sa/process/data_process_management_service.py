@@ -50,9 +50,24 @@ class DataProcessManagementService(BaseDataProcessManagementService):
 
         data_process_definition_id, version = self.clients.resource_registry.create(data_process_definition)
 
+        #-------------------------------
+        # Process Definition
+        #-------------------------------
+        # Create the underlying process definition
+        process_definition = ProcessDefinition()
+        process_definition.name = data_process_definition.name
+        process_definition.description = data_process_definition.description
+
+        process_definition.executable = {'module':data_process_definition.module, 'class':data_process_definition.class_name}
+        process_definition_id = self.clients.process_dispatcher.create_process_definition(process_definition=process_definition)
+
+        self.clients.resource_registry.create_association(data_process_definition_id, PRED.hasProcessDefinition, process_definition_id)
+
         return data_process_definition_id
 
     def update_data_process_definition(self, data_process_definition=None):
+        # TODO: If executable has changed, update underlying ProcessDefinition
+
         # Overwrite DataProcessDefinition object
         self.clients.resource_registry.update(data_process_definition)
 
@@ -60,20 +75,12 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         # Read DataProcessDefinition object with _id matching id
         log.debug("Reading DataProcessDefinition object id: %s" % data_process_definition_id)
         data_proc_def_obj = self.clients.resource_registry.read(data_process_definition_id)
-        if not data_proc_def_obj:
-            raise NotFound("DataProcessDefinition %s does not exist" % data_process_definition_id)
+
         return data_proc_def_obj
 
-
     def delete_data_process_definition(self, data_process_definition_id=''):
-        
-        data_proc_def_obj = self.clients.resource_registry.read(data_process_definition_id)
-        if data_proc_def_obj is None:
-            raise NotFound("DataProcessDefinition %s does not exist" % data_process_definition_id)
-
         # Delete the data process
         self.clients.resource_registry.delete(data_process_definition_id)
-        return
 
     def find_data_process_definitions(self, filters=None):
         """
@@ -85,7 +92,6 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         data_process_def_list , _ = self.clients.resource_registry.find_resources(RT.DataProcessDefinition, None, None, True)
         return data_process_def_list
 
-
     def assign_input_stream_definition_to_data_process_definition(self, stream_definition_id='', data_process_definition_id=''):
         """Connect the input  stream with a data process definition
         """
@@ -94,9 +100,6 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         data_process_definition_obj = self.clients.resource_registry.read(data_process_definition_id)
 
         self.clients.resource_registry.create_association(data_process_definition_id,  PRED.hasInputStreamDefinition,  stream_definition_id)
-
-        return
-
 
     def unassign_input_stream_definition_from_data_process_definition(self, stream_definition_id='', data_process_definition_id=''):
         """
@@ -113,9 +116,6 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         for association in associations:
             self.clients.resource_registry.delete_association(association)
 
-        return
-
-
     def assign_stream_definition_to_data_process_definition(self, stream_definition_id='', data_process_definition_id=''):
         """Connect the output  stream with a data process definition
         """
@@ -124,8 +124,6 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         data_process_definition_obj = self.clients.resource_registry.read(data_process_definition_id)
 
         self.clients.resource_registry.create_association(data_process_definition_id,  PRED.hasStreamDefinition,  stream_definition_id)
-
-        return
 
     def unassign_stream_definition_from_data_process_definition(self, stream_definition_id='', data_process_definition_id=''):
         """
@@ -142,10 +140,11 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         for association in associations:
             self.clients.resource_registry.delete_association(association)
 
-        return
 
+    # ------------------------------------------------------------------------------------------------
+    # Working with DataProcess
 
-    def create_data_process(self, data_process_definition_id='', in_data_product_id='', out_data_products=None):
+    def create_data_process(self, data_process_definition_id='', in_data_product_id='', out_data_products=None, configuration=None):
         """
         @param  data_process_definition_id: Object with definition of the
                     transform to apply to the input data product
@@ -154,13 +153,6 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         @retval data_process_id: ID of the newly created data process object
         """
 
-    #
-        #
-        #
-        #todo: break this method up into: 1. create data process, 2. assign in/out products, 3. activate data process
-        #
-        #
-        #
         inform = "Input Data Product:       "+str(in_data_product_id)+\
                  "Transformed by:           "+str(data_process_definition_id)+\
                  "To create output Product: "+str(out_data_products)
@@ -178,13 +170,15 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         log.debug("DataProcessManagementService:create_data_process - Create and store a new DataProcess with the resource registry  data_process_id: %s" +  str(data_process_id))
 
         # Register the data process instance as a data producer with DataAcquisitionMgmtSvc
-        #TODO: should this be outside this method? Called by orchastration?
+        #TODO: should this be outside this method? Called by orchestration?
         data_producer_id = self.clients.data_acquisition_management.register_process(data_process_id)
         log.debug("DataProcessManagementService:create_data_process register process with DataAcquisitionMgmtSvc: data_producer_id: %s", str(data_producer_id) )
 
 
         self.output_stream_dict = {}
-        #TODO: should this be outside this method? Called by orchastration?
+        #TODO: should this be outside this method? Called by orchestration?
+        if out_data_products is None:
+            raise BadRequest("Data Process must have output product(s) specified %s",  str(data_process_definition_id) )
         for name, out_data_product_id in out_data_products.iteritems():
 
             # check that the product is not already associated with a producer
@@ -246,7 +240,8 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         log.debug("DataProcessManagementService:create_data_process - Finally - create a subscription to the input stream")
         in_data_product_obj = self.clients.data_product_management.read_data_product(in_data_product_id)
         query = StreamQuery(stream_ids=[in_stream_id])
-        self.input_subscription_id = self.clients.pubsub_management.create_subscription(query=query, exchange_name=in_data_product_obj.name)
+        #self.input_subscription_id = self.clients.pubsub_management.create_subscription(query=query, exchange_name=in_data_product_obj.name)
+        self.input_subscription_id = self.clients.pubsub_management.create_subscription(query=query, exchange_name=data_process_name)
         log.debug("DataProcessManagementService:create_data_process - Finally - create a subscription to the input stream   input_subscription_id"  +  str(self.input_subscription_id))
 
         # add the subscription id to the resource for clean up later
@@ -254,29 +249,24 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         data_process_obj.input_subscription_id = self.input_subscription_id
         self.clients.resource_registry.update(data_process_obj)
 
+        procdef_ids,_ = self.clients.resource_registry.find_objects(data_process_definition_id,
+                    PRED.hasProcessDefinition, RT.ProcessDefinition, id_only=True)
+        if not procdef_ids:
+            raise BadRequest("Cannot find associated ProcessDefinition for DataProcessDefinition id=%s" % data_process_definition_id)
+        process_definition_id = procdef_ids[0]
 
-        #-------------------------------
-        # Process Definition
-        #-------------------------------
-        # Create the process definition for the basic transform
-        transform_definition = ProcessDefinition()
-        transform_definition.executable = {  'module':data_process_def_obj.module, 'class':data_process_def_obj.class_name }
-        transform_definition_id = self.clients.process_dispatcher.create_process_definition(process_definition=transform_definition)
-
-        # Launch the first transform process
+        # Launch the transform process
         log.debug("DataProcessManagementService:create_data_process - Launch the first transform process: ")
         log.debug("DataProcessManagementService:create_data_process - input_subscription_id: "   +  str(self.input_subscription_id) )
         log.debug("DataProcessManagementService:create_data_process - out_stream_id: "   +  str(self.output_stream_dict) )
-        log.debug("DataProcessManagementService:create_data_process - transform_definition_id: "   +  str(transform_definition_id) )
+        log.debug("DataProcessManagementService:create_data_process - process_definition_id: "   +  str(process_definition_id) )
         log.debug("DataProcessManagementService:create_data_process - data_process_id: "   +  str(data_process_id) )
-
-
 
         transform_id = self.clients.transform_management.create_transform( name=data_process_id, description=data_process_id,
                            in_subscription_id=self.input_subscription_id,
                            out_streams=self.output_stream_dict,
-                           process_definition_id=transform_definition_id,
-                           configuration={})
+                           process_definition_id=process_definition_id,
+                           configuration=configuration)
 
         log.debug("DataProcessManagementService:create_data_process - transform_id: "   +  str(transform_id) )
 
@@ -286,10 +276,6 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         # TODO: Flesh details of transform mgmt svc schedule and bind methods
 #        self.clients.transform_management_service.schedule_transform(transform_id)
 #        self.clients.transform_management_service.bind_transform(transform_id)
-
-        # TODO: Where should activate take place?
-        log.debug("DataProcessManagementService:create_data_process - transform_management.activate_transform")
-        self.clients.transform_management.activate_transform(transform_id)
 
         return data_process_id
 
@@ -363,6 +349,23 @@ class DataProcessManagementService(BaseDataProcessManagementService):
         #todo: add filter processing
         data_process_list , _ = self.clients.resource_registry.find_resources(RT.DataProcess, None, None, True)
         return data_process_list
+
+    def activate_data_process(self, data_process_id=""):
+
+        data_process_obj = self.read_data_process(data_process_id)
+
+        #find the Transform
+        log.debug("DataProcessManagementService:activate_data_process - get the transform associated with this data process")
+        transforms, _ = self.clients.resource_registry.find_objects(data_process_id, PRED.hasTransform, RT.Transform, True)
+        if not transforms:
+            raise NotFound("No Transform created for this Data Process " + str(transforms))
+        if len(transforms) != 1:
+            raise BadRequest("Data Process should only have ONE Transform at this time" + str(transforms))
+
+        log.debug("DataProcessManagementService:activate_data_process - transform_management.activate_transform")
+        self.clients.transform_management.activate_transform(transforms[0])
+        return
+
 
     def attach_process(self, process=''):
         """

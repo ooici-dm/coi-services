@@ -43,7 +43,6 @@ class CTDL1TemperatureTransform(TransformFunction):
 
 
         temperature = psd.get_values('temperature')
-        pressure = psd.get_values('pressure')
 
         longitude = psd.get_values('longitude')
         latitude = psd.get_values('latitude')
@@ -51,7 +50,6 @@ class CTDL1TemperatureTransform(TransformFunction):
         time = psd.get_values('time')
 
         log.warn('Got temperature: %s' % str(temperature))
-        log.warn('Got pressure: %s' % str(pressure))
 
 
         # The L1 temperature data product algorithm takes the L0 temperature data product and converts it into Celcius.
@@ -63,7 +61,10 @@ class CTDL1TemperatureTransform(TransformFunction):
         #    2) Scaling: T [C] = (tdec / 10,000) - 10
 
         # Use the constructor to put data into a granule
-        psc = PointSupplementConstructor(point_definition=self.outgoing_stream_def)
+        psc = PointSupplementConstructor(point_definition=self.outgoing_stream_def, stream_id=self.streams['output'])
+        ### Assumes the config argument for output streams is known and there is only one 'output'.
+        ### the stream id is part of the metadata which much go in each stream granule - this is awkward to do at the
+        ### application level like this!
 
         for i in xrange(len(temperature)):
             scaled_temperature = ( temperature[i] / 10000.0) - 10

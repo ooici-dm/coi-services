@@ -7,11 +7,8 @@ from pyon.util.log import log
 from interface.services.sa.idata_product_management_service import BaseDataProductManagementService
 from ion.services.sa.resource_impl.data_product_impl import DataProductImpl
 
-from pyon.datastore.datastore import DataStore
-from interface.objects import HdfStorage, CouchStorage
-from pyon.core.bootstrap import IonObject
-from pyon.core.exception import BadRequest, NotFound, Conflict
-from pyon.public import RT, LCS, PRED
+from pyon.core.exception import BadRequest, NotFound
+from pyon.public import RT, PRED
 
 class DataProductManagementService(BaseDataProductManagementService):
     """ @author     Bill Bollenbacher
@@ -135,47 +132,66 @@ class DataProductManagementService(BaseDataProductManagementService):
         """
         # retrieve the data_process object
         data_product_obj = self.clients.resource_registry.read(data_product_id)
-        if data_product_obj is None:
-            raise NotFound("Data Product %s does not exist" % data_product_id)
 
         # get the Stream associated with this data set; if no stream then create one, if multiple streams then Throw
         streams, _ = self.clients.resource_registry.find_objects(data_product_id, PRED.hasStream, RT.Stream, True)
-        if len(streams) > 1 or len(streams) == 0:
-            raise BadRequest('Data Product must have one stream associated%s' % str(data_product_id))
+        if not streams:
+            raise BadRequest('Data Product %s must have one stream associated' % str(data_product_id))
 
         stream = streams[0]
         log.debug("activate_data_product_persistence: stream = %s"  % str(stream))
 
         # Find THE ingestion configuration in the RR to create a ingestion configuration
         # todo: how are multiple ingest configs for a site managed?
-        ingest_config_ids, _ = self.clients.resource_registry.find_resources(restype=RT.IngestionConfiguration, id_only=True)
-        if len(ingest_config_ids) > 1 or len(ingest_config_ids) == 0:
-            log.debug("activate_data_product_persistence: ERROR ingest_config_ids = %s"  % str(ingest_config_ids))
+        ingest_config_objs, _ = self.clients.resource_registry.find_resources(restype=RT.IngestionConfiguration, id_only=False)
+        if len(ingest_config_objs) != 1:
+            log.debug("activate_data_product_persistence: ERROR ingest_config_objs = %s"  % str(ingest_config_objs))
             raise BadRequest('Data Product must have one ingestion configuration %s' % str(data_product_id))
-        log.debug("activate_data_product_persistence: ingest_config_ids = %s"  % str(ingest_config_ids))
 
-        #todo: does DPMS need to save the ingest _config_id in the product resource? Can this be found via the stream id?
-        ingestion_configuration_obj = self.clients.resource_registry.read(ingest_config_ids[0])
-        if ingestion_configuration_obj is None:
-            raise NotFound("Ingestion Configuration object does not exist %s" % ingest_config_ids[0])
+        ingestion_configuration_obj = ingest_config_objs[0]
         log.debug("activate_data_product_persistence: ingestion_configuration_obj = %s"  % str(ingestion_configuration_obj))
 
-        # create the dataset for the data
-        # !!!!!!!! (Currently) The Datastore name MUST MATCH the ingestion configuration name!!!
-        data_product_obj.dataset_id = self.clients.dataset_management.create_dataset(stream_id=stream, datastore_name=ingestion_configuration_obj.couch_storage.datastore_name, description=data_product_obj.description)
-        log.debug("activate_data_product_persistence: create_dataset = %s"  % str(data_product_obj.dataset_id))
+        if data_product_obj.dataset_id:
+            objs,_ = self.clients.resource_registry.find_objects(data_product_obj.dataset_id,
+                    PRED.hasIngestionConfiguration, RT.DatasetIngestionConfiguration, id_only=False)
+            if not objs:
+                log.debug('activate_data_product_persistence: Calling create_dataset_configuration for EXISTING Dataset', )
+                dataset_configuration_id = self.clients.ingestion_management.create_dataset_configuration(
+                    dataset_id=data_product_obj.dataset_id, archive_data=persist_data,
+                    archive_metadata=persist_metadata, ingestion_configuration_id=ingestion_configuration_obj._id)
+                log.debug("activate_data_product_persistence: create_dataset_configuration = %s"  % str(dataset_configuration_id))
+            else:
+                dataset_configuration_obj = objs[0]
+                dataset_configuration_obj.archive_data = persist_data
+                dataset_configuration_obj.archive_metadata = persist_metadata
 
+                # call ingestion management to update a dataset configuration
+                log.debug('activate_data_product_persistence: Calling update_dataset_config', )
+                dataset_configuration_id = self.clients.ingestion_management.update_dataset_config(dataset_configuration_obj)
+                log.debug("activate_data_product_persistence: update_dataset_config = %s"  % str(dataset_configuration_id))
+        else:
+            # create the dataset for the data
+            # !!!!!!!! (Currently) The Datastore name MUST MATCH the ingestion configuration name!!!
+            data_product_obj.dataset_id = self.clients.dataset_management.create_dataset(stream_id=stream,
+                    datastore_name=ingestion_configuration_obj.couch_storage.datastore_name, description=data_product_obj.description)
+            log.debug("activate_data_product_persistence: create_dataset = %s"  % str(data_product_obj.dataset_id))
+
+            self.update_data_product(data_product_obj)
+
+            # Need to read again, because the _rev has changed. Otherwise error on update later.
+            data_product_obj = self.clients.resource_registry.read(data_product_id)
+
+            # call ingestion management to create a dataset configuration
+            log.debug('activate_data_product_persistence: Calling create_dataset_configuration', )
+            dataset_configuration_id = self.clients.ingestion_management.create_dataset_configuration(
+                        dataset_id=data_product_obj.dataset_id, archive_data=persist_data,
+                        archive_metadata=persist_metadata, ingestion_configuration_id=ingestion_configuration_obj._id)
+            log.debug("activate_data_product_persistence: create_dataset_configuration = %s"  % str(dataset_configuration_id))
+
+        # save the dataset_configuration_id in the product resource? Can this be found via the stream id?
+
+        data_product_obj.dataset_configuration_id = dataset_configuration_id
         self.update_data_product(data_product_obj)
-
-        # call ingestion management to create a dataset configuration
-        log.debug('activate_data_product_persistence: Calling create_dataset_configuration', )
-        dataset_configuration_id = self.clients.ingestion_management.create_dataset_configuration( dataset_id=data_product_obj.dataset_id, archive_data=persist_data, archive_metadata=persist_metadata, ingestion_configuration_id=ingest_config_ids[0])
-        log.debug("activate_data_product_persistence: create_dataset_configuration = %s"  % str(dataset_configuration_id))
-        #todo: does DPMS need to save the dataset_configuration_id in the product resource? Can this be found via the stream id?
-
-
-
-        return
 
     def suspend_data_product_persistence(self, data_product_id=''):
         """Suspend data product data persistnce into a data set, multiple options
@@ -208,11 +224,29 @@ class DataProductManagementService(BaseDataProductManagementService):
 
         log.debug("suspend_data_product_persistence: deactivate = %s"  % str(ret))
 
-        return
-
     def set_data_product_lifecycle(self, data_product_id="", lifecycle_state=""):
        """
        declare a data_product to be in a given state
        @param data_product_id the resource id
        """
        return self.data_product.advance_lcs(data_product_id, lifecycle_state)
+
+    def get_last_update(self, data_product_id=''):
+        """@todo document this interface!!!
+
+        @param data_product_id    str
+        @retval last_update    LastUpdate
+        @throws NotFound    Data product not found or cache for data product not found.
+        """
+        from ion.processes.data.last_update_cache import CACHE_DATASTORE_NAME
+        datastore_name = CACHE_DATASTORE_NAME
+        db = self.container.datastore_manager.get_datastore(datastore_name)
+        stream_ids,other = self.clients.resource_registry.find_objects(subject=data_product_id, predicate=PRED.hasStream, id_only=True)
+        retval = {}
+        for stream_id in stream_ids:
+            try:
+                lu = db.read(stream_id)
+                retval[stream_id] = lu
+            except NotFound:
+                continue
+        return retval

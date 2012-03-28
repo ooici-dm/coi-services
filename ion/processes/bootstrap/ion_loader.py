@@ -28,7 +28,7 @@ class IONLoader(ImmediateProcess):
     COL_LCSTATE = "lcstate"
     COL_MF = "mf_ids"
 
-    ID_OOI_ASSETS = "X_OOI"
+    ID_ORG_ION = "ORG_ION"
 
     def on_start(self):
 
@@ -76,7 +76,7 @@ class IONLoader(ImmediateProcess):
                       'InstrumentAgent',
                       'InstrumentAgentInstance',
                       'DataProcessDefinition',
-                      'IngestionConfiguration',
+                      #'IngestionConfiguration',
                       'DataProduct',
                       'DataProcess',
                       'DataProductLink',
@@ -167,7 +167,10 @@ class IONLoader(ImmediateProcess):
 
     def _get_typed_value(self, value, schema_entry=None, targettype=None):
         targettype = targettype or schema_entry["type"]
-        if targettype is 'str':
+        if schema_entry and 'enum_type' in schema_entry:
+            enum_clzz = getattr(objects, schema_entry['enum_type'])
+            return enum_clzz._value_map[value]
+        elif targettype is 'str':
             return str(value)
         elif targettype is 'bool':
             lvalue = value.lower()
@@ -177,13 +180,22 @@ class IONLoader(ImmediateProcess):
                 return False
             else:
                 raise iex.BadRequest("Value %s is no bool" % value)
+        elif targettype is 'int':
+            try:
+                return int(value)
+            except Exception:
+                log.warn("Value %s is type %s not type %s" % (value, type(value), targettype))
+                return ast.literal_eval(value)
+        elif targettype is 'float':
+            try:
+                return float(value)
+            except Exception:
+                log.warn("Value %s is type %s not type %s" % (value, type(value), targettype))
+                return ast.literal_eval(value)
         elif targettype is 'simplelist':
             if value.startswith('[') and value.endswith(']'):
                 value = value[1:len(value)-1].strip()
             return list(value.split(','))
-        elif schema_entry and 'enum_type' in schema_entry:
-            enum_clzz = getattr(objects, schema_entry['enum_type'])
-            return enum_clzz._value_map[value]
         else:
             return ast.literal_eval(value)
 
@@ -256,7 +268,7 @@ class IONLoader(ImmediateProcess):
             if not org_ids:
                 raise iex.BadRequest("ION org not found. Was system force_cleaned since bootstrap?")
             ion_org_id = org_ids[0]
-            self._register_id("ORG_ION", ion_org_id)
+            self._register_id(self.ID_ORG_ION, ion_org_id)
 
     # --------------------------------------------------------------------------------------------------
     # Add specific types of resources below
@@ -291,6 +303,8 @@ class IONLoader(ImmediateProcess):
 
         org_id = row["org_id"]
         if org_id:
+            if org_id == self.ID_ORG_ION and DEBUG:
+                return
             org_id = self.resource_ids[org_id]
         mf_id = row["marine_facility_id"]
         if mf_id:
@@ -472,15 +486,15 @@ class IONLoader(ImmediateProcess):
             for ass_id in ass_ids:
                 ims_client.deploy_platform_device_to_logical_platform(res_id, self.resource_ids[ass_id])
 
-        ass_id = row["primary_deployment_lp_id"]
-        if ass_id:
-            ims_client.deploy_as_primary_platform_device_to_logical_platform(res_id, self.resource_ids[ass_id])
-
         ass_id = row["platform_model_id"]
         if ass_id:
             ims_client.assign_platform_model_to_platform_device(self.resource_ids[ass_id], res_id)
 
-        self._resource_advance_lcs(row, res_id)
+        self._resource_advance_lcs(row, res_id, "PlatformDevice")
+
+        ass_id = row["primary_deployment_lp_id"]
+        if ass_id:
+            ims_client.deploy_as_primary_platform_device_to_logical_platform(res_id, self.resource_ids[ass_id])
 
     def _load_InstrumentDevice(self, row):
         res_id = self._basic_resource_create(row, "InstrumentDevice", "id/",
@@ -493,10 +507,6 @@ class IONLoader(ImmediateProcess):
             for ass_id in ass_ids:
                 ims_client.deploy_instrument_device_to_logical_instrument(res_id, self.resource_ids[ass_id])
 
-        ass_id = row["primary_deployment_li_id"]
-        if ass_id:
-            ims_client.deploy_as_primary_instrument_device_to_logical_instrument(res_id, self.resource_ids[ass_id])
-
         ass_id = row["instrument_model_id"]
         if ass_id:
             ims_client.assign_instrument_model_to_instrument_device(self.resource_ids[ass_id], res_id)
@@ -505,13 +515,26 @@ class IONLoader(ImmediateProcess):
         if ass_id:
             ims_client.assign_instrument_device_to_platform_device(res_id, self.resource_ids[ass_id])
 
-        self._resource_advance_lcs(row, res_id)
+        self._resource_advance_lcs(row, res_id, "InstrumentDevice")
+
+        ass_id = row["primary_deployment_li_id"]
+        if ass_id:
+            ims_client.deploy_as_primary_instrument_device_to_logical_instrument(res_id, self.resource_ids[ass_id])
+
 
     def _load_InstrumentAgent(self, row):
         res_id = self._basic_resource_create(row, "InstrumentAgent", "ia/",
                                             "instrument_management", "create_instrument_agent")
 
-        self._resource_advance_lcs(row, res_id)
+        svc_client = self._get_service_client("instrument_management")
+
+        im_ids = row["instrument_model_ids"]
+        if im_ids:
+            im_ids = self._get_typed_value(im_ids, targettype="simplelist")
+            for im_id in im_ids:
+                svc_client.assign_instrument_model_to_instrument_agent(self.resource_ids[im_id], res_id)
+
+        self._resource_advance_lcs(row, res_id, "InstrumentAgent")
 
     def _load_InstrumentAgentInstance(self, row):
         ia_id = row["instrument_agent_id"]
@@ -576,6 +599,10 @@ class IONLoader(ImmediateProcess):
 
         dpd_id = self.resource_ids[row["data_process_definition_id"]]
         in_data_product_id = self.resource_ids[row["in_data_product_id"]]
+        configuration = row["configuration"]
+        if configuration:
+            configuration = self._get_typed_value(configuration, targettype="dict")
+
         out_data_products = row["out_data_products"]
         if out_data_products:
             out_data_products = self._get_typed_value(out_data_products, targettype="dict")
@@ -585,10 +612,12 @@ class IONLoader(ImmediateProcess):
         svc_client = self._get_service_client("data_process_management")
 
         headers = self._get_op_headers(row)
-        res_id = svc_client.create_data_process(dpd_id, in_data_product_id, out_data_products, headers=headers)
+        res_id = svc_client.create_data_process(dpd_id, in_data_product_id, out_data_products, configuration, headers=headers)
         self._register_id(row[self.COL_ID], res_id)
 
         self._resource_assign_mf(row, res_id)
+
+        res_id = svc_client.activate_data_process(res_id)
 
     def _load_DataProductLink(self, row):
         log.info("Loading DataProductLink")
@@ -596,8 +625,10 @@ class IONLoader(ImmediateProcess):
         dp_id = self.resource_ids[row["data_product_id"]]
         res_id = self.resource_ids[row["input_resource_id"]]
 
+        create_stream = self._get_typed_value(row["create_stream"], targettype="bool")
+
         svc_client = self._get_service_client("data_acquisition_management")
-        svc_client.assign_data_product(res_id, dp_id, False)
+        svc_client.assign_data_product(res_id, dp_id, create_stream)
 
     def _load_Attachment(self, row):
         log.info("Loading Attachment")

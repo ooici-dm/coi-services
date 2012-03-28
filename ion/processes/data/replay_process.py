@@ -4,21 +4,27 @@
 @description Replay Process handling set manipulations for the DataModel
 '''
 
-from pyon.public import log
-from pyon.datastore.datastore import DataStore
-from pyon.core.exception import IonException
-from pyon.util.file_sys import FS, FileSystem
-from prototype.hdf.hdf_array_iterator import acquire_data
-from prototype.hdf.hdf_codec import HDFEncoder
-from prototype.sci_data.constructor_apis import DefinitionTree, PointSupplementConstructor
-from interface.objects import BlogBase, StreamGranuleContainer, StreamDefinitionContainer, CoordinateAxis, QuantityRangeElement, CountElement, RangeSet
-from interface.services.dm.ireplay_process import BaseReplayProcess
-from gevent.greenlet import Greenlet
-from gevent.coros import RLock
 import os
 import time
 import copy
 import hashlib
+
+from gevent.greenlet import Greenlet
+from gevent.coros import RLock
+
+from pyon.core.exception import IonException, BadRequest, Inconsistent
+from pyon.datastore.datastore import DataStore
+from pyon.public import log
+from pyon.util.file_sys import FS, FileSystem
+
+from prototype.hdf.hdf_array_iterator import acquire_data
+from prototype.hdf.hdf_codec import HDFEncoder
+from prototype.sci_data.constructor_apis import DefinitionTree, PointSupplementConstructor
+
+from interface.objects import BlogBase, StreamGranuleContainer, StreamDefinitionContainer, CoordinateAxis, QuantityRangeElement, CountElement, RangeSet
+from interface.services.dm.ireplay_process import BaseReplayProcess
+from interface.services.coi.iresource_registry_service import ResourceRegistryServiceProcessClient
+
 
 
 class ReplayProcessException(IonException):
@@ -46,7 +52,10 @@ class ReplayProcess(BaseReplayProcess):
         self.delivery_format = self.CFG.get_safe('process.delivery_format',{})
         self.datastore_name = self.CFG.get_safe('process.datastore_name','dm_datastore')
 
-        self.definition = self.delivery_format.get('container')
+        definition_id = self.delivery_format.get('definition_id')
+        rrsc = ResourceRegistryServiceProcessClient(process=self, node=self.container.node)
+        definition = rrsc.read(definition_id)
+        self.definition = definition.container
 
         self.fields = self.delivery_format.get('fields',None)
 
@@ -54,8 +63,8 @@ class ReplayProcess(BaseReplayProcess):
         self.key_id = self.CFG.get_safe('process.key_id')
         self.stream_id = self.CFG.get_safe('process.publish_streams.output')
 
-        if not (self.stream_id and hasattr(self, 'output')):
-            raise RuntimeError('The replay agent requires an output stream publisher named output. Invalid configuration!')
+        if not self.stream_id:
+            raise Inconsistent('The replay process requires a stream id. Invalid configuration!')
 
         self.data_stream_id = self.definition.data_stream_id
         self.encoding_id = self.definition.identifiables[self.data_stream_id].encoding_id
@@ -70,6 +79,9 @@ class ReplayProcess(BaseReplayProcess):
         '''
         @brief Spawns a greenlet to take care of the query and work
         '''
+        if not hasattr(self, 'output'):
+            raise Inconsistent('The replay process requires an output stream publisher named output. Invalid configuration!')
+
         datastore_name = self.datastore_name
         key_id = self.key_id
 
@@ -106,7 +118,7 @@ class ReplayProcess(BaseReplayProcess):
         '''
 
         if results is None:
-            log.warn('No Results')
+            log.info('No Results')
             return
 
         publish_queue = self._parse_results(results)
@@ -122,6 +134,10 @@ class ReplayProcess(BaseReplayProcess):
 
         if self.delivery_format.has_key('time'):
             granule = self.time_subset(granule, self.delivery_format['time'])
+
+        total_records = granule.identifiables[self.element_count_id].value
+        granule.identifiables[self.element_count_id].constraint.intervals = [[0, total_records-1],]
+
 
         if self.delivery_format.has_key('records'):
             assert isinstance(self.delivery_format['records'], int), 'delivery format is incorrectly formatted.'
@@ -169,7 +185,7 @@ class ReplayProcess(BaseReplayProcess):
                     publish_queue.append(packet)
                 continue
 
-            log.warn('Unknown packet type in replay.')
+            log.info('Unknown packet type in replay.')
 
         return publish_queue
 
@@ -294,7 +310,7 @@ class ReplayProcess(BaseReplayProcess):
             return None
 
 
-        filepath = FileSystem.get_url(FS.CACHE,'%s.hdf5' % sha1)
+        filepath = FileSystem.get_hierarchical_url(FS.CACHE, sha1, '.hdf5')
 
         if not os.path.exists(filepath):
             log.debug('File with sha1 does not exist')
@@ -348,12 +364,12 @@ class ReplayProcess(BaseReplayProcess):
         pair1 = (
             granule1.identifiables['time_bounds'].value_pair[0],
             '%s.hdf5' % granule1.identifiables[encoding_id].sha1
-        )
+            )
 
         pair2 = (
             granule2.identifiables['time_bounds'].value_pair[0],
             '%s.hdf5' % granule2.identifiables[encoding_id].sha1
-        )
+            )
 
         files = []
 
@@ -421,7 +437,7 @@ class ReplayProcess(BaseReplayProcess):
         return {
             'granule':granule1,
             'files':[pair1, pair2]
-            }
+        }
 
 
 
@@ -440,8 +456,8 @@ class ReplayProcess(BaseReplayProcess):
         retval = {}
         for key, value in granule.identifiables.iteritems():
             if isinstance(value, RangeSet):
-                    values_path = value.values_path or definition.identifiables[key].values_path
-                    retval[key] = values_path
+                values_path = value.values_path or definition.identifiables[key].values_path
+                retval[key] = values_path
 
             elif isinstance(value, CoordinateAxis):
                 values_path = value.values_path or definition.identifiables[key].values_path
@@ -511,7 +527,7 @@ class ReplayProcess(BaseReplayProcess):
         #-------------------------------------------------------------------------------------
         file_list.sort()
         file_list = list(i[1] for i in file_list)
-        file_list = list([FileSystem.get_url(FS.CACHE, '%s' % i) for i in file_list])
+        file_list = list([FileSystem.get_hierarchical_url(FS.CACHE, '%s' % i) for i in file_list])
 
         pairs = self._pair_up(granule)
         var_names = list([i[0] for i in pairs])

@@ -3,7 +3,9 @@ from interface.services.dm.itransform_management_service import TransformManagem
 from interface.services.coi.iresource_registry_service import ResourceRegistryServiceClient
 from pyon.ion.process import StandaloneProcess
 from pyon.public import log, RT
+from pyon.core.exception import BadRequest
 from interface.objects import ProcessDefinition
+import time, hashlib
 
 class RedisTransform(StandaloneProcess):
 
@@ -41,8 +43,10 @@ class RedisTransform(StandaloneProcess):
         # Create the transforms
         #----------------------------------------------------------------------------------
 
+        name = 'redis_transform' + hashlib.sha1(str(time.time())).hexdigest().upper()[:8]
+
         transform_id = transform_management_service.create_transform(
-            name='redis_transform',
+            name=name,
             in_subscription_id=subscription_id,
             out_streams=None,
             process_definition_id = redis_transform_procdef_id,
@@ -51,8 +55,10 @@ class RedisTransform(StandaloneProcess):
 
         # start the transforms - for a test case it makes sense to do it before starting the producer but it is not required
 
-        transform_management_service.activate_transform(transform_id=transform_id)
-
+        try:
+            transform_management_service.activate_transform(transform_id=transform_id)
+        except BadRequest:
+            log.debug("Subscription is already active. A previous transform may have already activated this subscription.")
 
 
 

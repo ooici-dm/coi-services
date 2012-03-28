@@ -22,7 +22,7 @@ from interface.services.dm.ipubsub_management_service import PubsubManagementSer
 from prototype.sci_data.constructor_apis import PointSupplementConstructor
 from pyon.service.service import BaseService
 import gevent
-import time
+import time, hashlib
 import random
 import uuid
 
@@ -43,7 +43,11 @@ class RedisCoordinationTransform(TransformDataProcess):
 
         self.COMPARE_SET = 'compareset'
 
-        self.conn = redis.StrictRedis('localhost', db=0)
+
+        host = self.CFG.get_safe('system.redis.host','localhost')
+        db = self.CFG.get_safe('system.redis.db',0)
+
+        self.conn = redis.StrictRedis(host, db=db)
 
 
 
@@ -97,7 +101,10 @@ class RedisCoordinationPublisher(StandaloneProcess):
           in my_output_stream_id
         '''
 
-        self.conn = redis.StrictRedis('localhost', db=0)
+        host = self.CFG.get_safe('system.redis.host','localhost')
+        db = self.CFG.get_safe('system.redis.db',0)
+
+        self.conn = redis.StrictRedis(host, db=db)
         self.COMPARE_SET = 'compareset'
 
         # Get the stream(s)

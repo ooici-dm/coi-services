@@ -1,5 +1,6 @@
 from interface.services.cei.iprocess_dispatcher_service import ProcessDispatcherServiceClient
 from interface.services.dm.itransform_management_service import TransformManagementServiceClient
+from interface.services.dm.ipubsub_management_service import PubsubManagementServiceClient
 from interface.services.coi.iresource_registry_service import ResourceRegistryServiceClient
 from pyon.ion.process import StandaloneProcess
 from pyon.public import log, RT
@@ -18,12 +19,19 @@ class RedisTransform(StandaloneProcess):
         process_dispatcher = ProcessDispatcherServiceClient(node=self.container.node)
         transform_management_service = TransformManagementServiceClient(node=self.container.node)
         rr_cli = ResourceRegistryServiceClient(node=self.container.node)
+        pubsub_cli = PubsubManagementServiceClient(node = self.container.node)
 
         #----------------------------------------------------------------------------------
         # Find the exchange subscription
         #----------------------------------------------------------------------------------
 
         subscription, _ =  rr_cli.find_resources(RT.Subscription, id_only=False)
+
+        #----------------------------------------------------------------------------------
+        # Activate the subscription
+        #----------------------------------------------------------------------------------
+
+        pubsub_cli.activate_subscription()
 
 
 #        #----------------------------------------------------------------------------------
@@ -69,7 +77,7 @@ class RedisTransform(StandaloneProcess):
         }
 
 
-        pid = self.container.spawn_process('redis_transform', 'ion.processes.redis_coordination_example', 'RedisTransform', configuration)
+        pid = self.container.spawn_process('redis_transform', 'ion.processes.redis_coordination_example', 'RedisCoordinationTransform', configuration)
 
 
 

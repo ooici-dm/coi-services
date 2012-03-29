@@ -16,22 +16,23 @@ class RedisTransform(StandaloneProcess):
 
         log.warn("came here!")
 
-        process_dispatcher = ProcessDispatcherServiceClient(node=self.container.node)
-        transform_management_service = TransformManagementServiceClient(node=self.container.node)
+#        process_dispatcher = ProcessDispatcherServiceClient(node=self.container.node)
+#        transform_management_service = TransformManagementServiceClient(node=self.container.node)
+
         rr_cli = ResourceRegistryServiceClient(node=self.container.node)
         pubsub_cli = PubsubManagementServiceClient(node = self.container.node)
 
         #----------------------------------------------------------------------------------
-        # Find the exchange subscription
+        # Find the exchange subscription in the system and activate it
         #----------------------------------------------------------------------------------
+#        subscription, _ =  rr_cli.find_resources(RT.Subscription, id_only=False)
 
-        subscription, _ =  rr_cli.find_resources(RT.Subscription, id_only=False)
+        subscriptions, subscriptions_info =  rr_cli.find_resources(RT.Subscription)
 
-        #----------------------------------------------------------------------------------
-        # Activate the subscription
-        #----------------------------------------------------------------------------------
+        subscription_id =  subscriptions_info[0]['id']
+        subscription = subscriptions[0]
 
-        pubsub_cli.activate_subscription()
+        pubsub_cli.activate_subscription(subscription_id)
 
 
 #        #----------------------------------------------------------------------------------

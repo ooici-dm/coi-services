@@ -44,8 +44,15 @@ class RedisCoordinationTransform(TransformDataProcess):
         self.COMPARE_SET = 'compareset'
 
 
-        host = self.CFG.get_safe('system.redis.host','localhost')
-        db = self.CFG.get_safe('system.redis.db',0)
+        host = self.CFG.get_safe('server.redis.host','localhost')
+        db = self.CFG.get_safe('server.redis.db',0)
+
+        log.warn("CFG: %s" % self.CFG)
+        log.warn("host: %s" % host)
+        log.warn("db: %s" % db)
+
+#        host = '192.168.100.49'
+#        db = 0
 
         self.conn = redis.StrictRedis(host, db=db)
 
@@ -101,8 +108,12 @@ class RedisCoordinationPublisher(StandaloneProcess):
           in my_output_stream_id
         '''
 
-        host = self.CFG.get_safe('system.redis.host','localhost')
-        db = self.CFG.get_safe('system.redis.db',0)
+        host = self.CFG.get_safe('server.redis.host','localhost')
+        db = self.CFG.get_safe('server.redis.db',0)
+
+#        host = '192.168.100.49'
+#        db = 0
+
 
         self.conn = redis.StrictRedis(host, db=db)
         self.COMPARE_SET = 'compareset'
@@ -139,4 +150,4 @@ class RedisCoordinationPublisher(StandaloneProcess):
             log.warn('RedisCoordinationPublisher sending: %s\n' % packet_dict)
             self.publisher.publish(packet_dict)
 
-            time.sleep(2.0)
+#            time.sleep(2.0)

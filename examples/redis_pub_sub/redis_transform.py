@@ -32,8 +32,10 @@ class RedisTransform(StandaloneProcess):
         subscription_id =  subscriptions_info[0]['id']
         subscription = subscriptions[0]
 
-        pubsub_cli.activate_subscription(subscription_id)
-
+        try:
+            pubsub_cli.activate_subscription(subscription_id)
+        except BadRequest:
+            log.debug("Subscription is already active.")
 
 #        #----------------------------------------------------------------------------------
 #        # Create a process definition for the transforms

@@ -68,10 +68,11 @@ class RedisTransform(StandaloneProcess):
 #        except BadRequest:
 #            log.debug("Subscription is already active. A previous transform may have already activated this subscription.")
 
+        name = 'redis_transform' + hashlib.sha1(str(time.time())).hexdigest().upper()[:8]
 
         configuration={}
         configuration['process'] = {
-            'name':'redis_transform',
+            'name':name,
             'type':'stream_process',
             'listen_name':subscription.exchange_name,
             'transform_id':'1234'

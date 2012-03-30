@@ -34,7 +34,7 @@ setup(  name = 'coi-services',
             'WebTest',
             'requests',
             'seawater',
-            'redis'
+            'redis',
             'matplotlib==1.1.0'
         ],
      )

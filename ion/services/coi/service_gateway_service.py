@@ -4,7 +4,7 @@
 __author__ = 'Stephen P. Henrie'
 __license__ = 'Apache 2.0'
 
-import inspect, collections, ast, simplejson, json, sys, time
+import inspect, collections, ast, simplejson, json, sys, time, traceback
 from flask import Flask, request, abort
 from gevent.wsgi import WSGIServer
 
@@ -39,6 +39,7 @@ GATEWAY_RESPONSE = 'GatewayResponse'
 GATEWAY_ERROR = 'GatewayError'
 GATEWAY_ERROR_EXCEPTION = 'Exception'
 GATEWAY_ERROR_MESSAGE = 'Message'
+GATEWAY_ERROR_TRACE = 'Trace'
 
 DEFAULT_ACTOR_ID = 'anonymous'
 DEFAULT_EXPIRY = '0'
@@ -145,7 +146,7 @@ class ServiceGatewayService(BaseServiceGatewayService):
 
 @app.errorhandler(403)
 def custom_403(error):
-    return json_response({GATEWAY_ERROR: "The request has been denied since it did not originate from a trusted originator configured in the pyon.yaml file."})
+    return json_response({GATEWAY_ERROR: "The request has been denied since it did not originate from a trusted originator."})
 
 
 #Checks to see if the remote_addr in the request is in the list of specified trusted addresses, if any.
@@ -331,7 +332,8 @@ def build_error_response(e):
     exc_type, exc_obj, exc_tb = sys.exc_info()
     result = {
         GATEWAY_ERROR_EXCEPTION : exc_type.__name__,
-        GATEWAY_ERROR_MESSAGE : str(e.message)
+        GATEWAY_ERROR_MESSAGE : str(e.message),
+        GATEWAY_ERROR_TRACE : traceback.format_exception(*sys.exc_info())
     }
 
     if request.args.has_key(RETURN_FORMAT_PARAM):

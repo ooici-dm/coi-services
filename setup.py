@@ -25,8 +25,7 @@ setup(  name = 'coi-services',
         keywords = ['ooici','ioncore', 'pyon', 'coi'],
         packages = find_packages(),
         dependency_links = [
-            'http://ooici.net/releases',
-            'http://github.com/lukecampbell/elasticpy/tarball/master#egg=elasticpy'
+            'http://ooici.net/releases'
         ],
         test_suite = 'pyon',
         install_requires = [
@@ -36,6 +35,6 @@ setup(  name = 'coi-services',
             'requests',
             'seawater',
             #'matplotlib==1.1.0'
-            'elasticpy'
+            'elasticpy==0.2'
         ],
      )

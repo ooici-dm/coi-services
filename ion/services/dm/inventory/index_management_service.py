@@ -8,7 +8,7 @@
 from pyon.ion.resource import RT
 from pyon.public import CFG
 from pyon.core.bootstrap import get_sys_name
-from pyon.core.exception import NotFound
+from pyon.core.exception import NotFound, BadRequest
 from interface.objects import Index
 import json
 import urllib2
@@ -38,7 +38,7 @@ class IndexManagementService(BaseIndexManagementService):
         # Handle the name uniqueness factor
         res, _ = self.clients.resource_registry.find_resources(name=index_name, id_only=True)
         if len(res)>0:
-            raise BadRequest('The index resource with name: %s, already exists.' % name)
+            raise BadRequest('The index resource with name: %s, already exists.' % index_name)
             
         es = ep.ElasticSearch()
         index_res = Index()
@@ -142,3 +142,25 @@ class IndexManagementService(BaseIndexManagementService):
             raise NotFound("The query had no results.")
 
         return res_list
+
+    def _map_resource_index(self, index_name, resource_id):
+        '''
+        Maps resources from CouchDB into an elastic search index
+        '''
+        pass
+
+    def _resource_bfs(self, resource_id):
+        '''
+        Breadth First Search of resources based on given resource
+        '''
+        marked = [resource_id]
+        queue = [resource_id]
+        while len(queue) > 0:
+            t = queue.pop(0)
+            marked.append(t)
+            res_ids, assocs = self.clients.resource_registry.find_objects(subject=t, id_only=True)
+            for res in res_ids:
+                if not res in marked:
+                    marked.append(res)
+                    queue.append(res)
+        return marked

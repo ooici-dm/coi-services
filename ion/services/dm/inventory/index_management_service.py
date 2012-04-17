@@ -42,7 +42,7 @@ class IndexManagementService(BaseIndexManagementService):
             raise BadRequest('The index resource with name: %s, already exists.' % index_name)
             
         es = ep.ElasticSearch()
-        index_res = Index()
+        index_res = Index(name=index_name)
         index_res.index_name = index_name
        
         if index_type == IndexManagementService.COUCHDB_RIVER_INDEX:
@@ -63,7 +63,7 @@ class IndexManagementService(BaseIndexManagementService):
             #--------------------------------------
             # Create a simple index
             #--------------------------------------
-            es.index_create(index_name, index_name)
+            es.index_create(index_name)
             index_res.index_type = 'simple_index'
 
 
@@ -86,7 +86,6 @@ class IndexManagementService(BaseIndexManagementService):
 
             es.index_create(
                 index_name=index_name,
-                index_type=itype,
                 shards = shards or 5,
                 replicas = replicas or 1
             )

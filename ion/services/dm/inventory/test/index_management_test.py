@@ -8,13 +8,14 @@
 from mock import Mock, patch
 import elasticpy
 from nose.plugins.attrib import attr
+from interface.objects import Index
 from pyon.util.int_test import IonIntegrationTestCase
 from pyon.util.unit_test import PyonTestCase
 from interface.services.coi.iresource_registry_service import ResourceRegistryServiceClient
 from interface.services.dm.iindex_management_service import IndexManagementServiceClient
 from ion.services.dm.inventory.index_management_service import IndexManagementService
 
-
+from ion.services.dm.inventory.index_management_service import elasticsearch_host, elasticsearch_port
 
 @attr('UNIT',group='dm')
 class IndexManagementUnitTest(PyonTestCase):
@@ -61,10 +62,36 @@ class IndexManagementUnitTest(PyonTestCase):
 
 
     def test_read_index(self):
-        pass
+        # mocks
+        return_obj = dict(mock='mock')
+        self.rr_read.return_value = return_obj
+
+        # execution
+        retval = self.index_management.read_index('mock_index_id')
+
+        # assertions
+        self.assertEquals(return_obj, retval, 'The resource should be returned.')
+
+
 
     def test_delete_index(self):
-        pass
+        # Mocks
+        mock_index = Index(index_name='mocked',index_type=IndexManagementService.SIMPLE_INDEX)
+        self.rr_read.return_value = mock_index
+
+        with patch('elasticpy.ElasticSearch') as MockSearch:
+            instance = MockSearch.return_value
+            mock_river_delete = Mock()
+            mock_index_delete = Mock()
+            instance.river_couchdb_delete = mock_river_delete
+            instance.index_delete = mock_index_delete
+
+            # Execution
+            self.index_management.delete_index('mock_index_id')
+
+            # Assertions
+            self.rr_delete.assert_called_once_with('mock_index_id')
+            mock_index_delete.assert_called_once_with('mocked')
 
     def test_list_indexes(self):
         pass
@@ -80,16 +107,40 @@ class IndexManagementUnitTest(PyonTestCase):
 
 @attr('INT',group='dm')
 class IndexManagementIntTest(IonIntegrationTestCase):
+
     def setUp(self):
+        from urllib2 import HTTPError
+
         super(IndexManagementIntTest,self).setUp()
         self._start_container()
         self.container.start_rel_from_url('res/deploy/r2dm.yml')
 
-        ims_cli = IndexManagementServiceClient()
-        rr_cli = ResourceRegistryServiceClient()
+        self.ims_cli = IndexManagementServiceClient()
+        self.rr_cli = ResourceRegistryServiceClient()
+        try:
+            elasticpy.ElasticSearch().index_delete('test_index')
+        except HTTPError:
+            pass #Means the index isn't there
 
-    def test_create_index(self):
-        pass
+    def test_create_simple_index(self):
+        import urllib2
+        import json
+
+        index_id = self.ims_cli.create_index('test_index', IndexManagementService.SIMPLE_INDEX)
+
+        index_res = self.rr_cli.read(index_id)
+        self.assertTrue(index_res.index_name == 'test_index', "Improperly formed resource.")
+        self.assertTrue(index_res.index_type == 'simple_index', "Improperly formed resource. [%s]" % index_res.index_type)
+
+        url = 'http://%s:%s/_status' % (elasticsearch_host, elasticsearch_port)
+        request = urllib2.Request(url,None)
+        request.add_header('Content-Type','json')
+        response = json.loads(urllib2.urlopen(request).read())
+        self.assertTrue(response['indices'].has_key('test_index'),"The index was not created.")
+
+
+        # Cleanup
+        elasticpy.ElasticSearch().index_delete('test_index')
 
     def test_read_index(self):
         pass

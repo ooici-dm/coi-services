@@ -14,6 +14,7 @@ import json
 import urllib2
 from interface.services.dm.iindex_management_service import BaseIndexManagementService
 import elasticpy as ep
+from pyon.util.log import log
 
 
 elasticsearch_host = 'localhost'
@@ -62,7 +63,7 @@ class IndexManagementService(BaseIndexManagementService):
             #--------------------------------------
             # Create a simple index
             #--------------------------------------
-            es.index_creat(index_name, index_name)
+            es.index_create(index_name, index_name)
             index_res.index_type = 'simple_index'
 
 
@@ -93,6 +94,7 @@ class IndexManagementService(BaseIndexManagementService):
             index_res.options = options
 
         index_id, _ = self.clients.resource_registry.create(index_res)
+        return index_id
 
     def update_index(self, index=None):
         raise NotImplemented("update_index is not yet implemented")
@@ -102,12 +104,15 @@ class IndexManagementService(BaseIndexManagementService):
         return index_resources
 
     def delete_index(self, index_id=''):
-        import elasticpy as ep
 
-        index = self.clients.resource_registry.read(index_id)
-        search = ep.ElasticSearch()
-        search.river_couchdb_delete(index.index_name)
-        search.index_delete(index.index_name)
+        index_res = self.clients.resource_registry.read(index_id)
+
+        if index_res.index_type == IndexManagementService.COUCHDB_RIVER_INDEX:
+            ep.ElasticSearch().river_couchdb_delete(index_res.index_name)
+
+        ep.ElasticSearch().index_delete(index_res.index_name)
+
+        log.debug('Deleted index %s from ElasticSearch' % index_res.index_name)
 
         self.clients.resource_registry.delete(index_id)
         return True

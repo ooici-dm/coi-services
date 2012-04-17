@@ -124,7 +124,8 @@ class TransformManagementServiceTest(PyonTestCase):
         self.mock_pd_schedule.assert_called_with(
             'mock_procdef_id',
             None,
-            out_config
+            out_config,
+            ""
         )
         self.assertTrue(self.mock_rr_create.called)
 
@@ -167,7 +168,8 @@ class TransformManagementServiceTest(PyonTestCase):
         self.mock_pd_schedule.assert_called_with(
             'mock_procdef_id',
             None,
-            out_config
+            out_config,
+            ""
         )
 
         self.assertTrue(self.mock_rr_create.called)
@@ -210,7 +212,8 @@ class TransformManagementServiceTest(PyonTestCase):
         self.mock_pd_schedule.assert_called_with(
             'mock_procdef_id',
             None,
-            out_config
+            out_config,
+            ""
         )
 
         self.assertTrue(self.mock_rr_create.called)
@@ -327,7 +330,7 @@ class TransformManagementServiceIntTest(IonIntegrationTestCase):
                                               'class':'TransformExample'}
         self.process_definition_id = self.procd_cli.create_process_definition(process_definition=self.process_definition)
 
-
+    @attr('LOCOINT')
     @unittest.skipIf(os.getenv('CEI_LAUNCH_TEST', False),'Not integrated for CEI')
     def test_create_transform(self):
         configuration = {'program_args':{'arg1':'value'}}
@@ -394,6 +397,7 @@ class TransformManagementServiceIntTest(IonIntegrationTestCase):
             )
         self.tms_cli.delete_transform(transform_id)
 
+    @attr('LOCOINT')
     @unittest.skipIf(os.getenv('CEI_LAUNCH_TEST', False),'Not integrated for CEI')
     def test_create_no_output(self):
         transform_id = self.tms_cli.create_transform(
@@ -642,6 +646,7 @@ class TransformManagementServiceIntTest(IonIntegrationTestCase):
             except Empty:
                 assertions(False, "Failed to process all messages correctly.")
 
+    @attr('LOCOINT')
     @unittest.skipIf(os.getenv('CEI_LAUNCH_TEST',False),'CEI incompatible')
     def test_transform_restart(self):
         tms_cli = self.tms_cli

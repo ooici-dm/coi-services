@@ -168,7 +168,19 @@ class IndexManagementIntTest(IonIntegrationTestCase):
 
 
     def test_list_indexes(self):
-        pass
+        indices = [
+            Index(name='test1'),
+            Index(name='test2'),
+            Index(name='test3')
+        ]
+        for index in indices:
+            self.rr_cli.create(index)
+
+        retvals = self.ims_cli.list_indexes()
+
+        self.assertTrue(len(retvals)==3, "Incorrect number of indexes listed.")
+
+
 
     def test_find_indexes(self):
         pass

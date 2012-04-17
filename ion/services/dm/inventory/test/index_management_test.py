@@ -9,6 +9,7 @@ from mock import Mock, patch
 import elasticpy
 from nose.plugins.attrib import attr
 from interface.objects import Index
+from pyon.core.exception import NotFound
 from pyon.util.int_test import IonIntegrationTestCase
 from pyon.util.unit_test import PyonTestCase
 from interface.services.coi.iresource_registry_service import ResourceRegistryServiceClient
@@ -132,21 +133,39 @@ class IndexManagementIntTest(IonIntegrationTestCase):
         self.assertTrue(index_res.index_name == 'test_index', "Improperly formed resource.")
         self.assertTrue(index_res.index_type == 'simple_index', "Improperly formed resource. [%s]" % index_res.index_type)
 
-        url = 'http://%s:%s/_status' % (elasticsearch_host, elasticsearch_port)
-        request = urllib2.Request(url,None)
-        request.add_header('Content-Type','json')
-        response = json.loads(urllib2.urlopen(request).read())
-        self.assertTrue(response['indices'].has_key('test_index'),"The index was not created.")
-
+        indices = elasticpy.ElasticSearch().index_list()
+        self.assertTrue("test_index" in indices, "Index failed to be created in ElasticSearch.")
 
         # Cleanup
         elasticpy.ElasticSearch().index_delete('test_index')
 
     def test_read_index(self):
-        pass
+        index_res = Index(name='test_index',index_name='test_index',index_type=IndexManagementService.SIMPLE_INDEX)
+        index_id, _ = self.rr_cli.create(index_res)
+
+        retval = self.ims_cli.read_index(index_id)
+        self.assertEquals( (retval.name, retval.index_name, retval.index_type), 
+                (index_res.name, index_res.index_name, index_res.index_type), "Improperly retrieved resource.")
+
+
 
     def test_delete_index(self):
-        pass
+        index_res = Index(name='test_index',index_name='test_index',index_type='simple_index')
+        index_id, _ = self.rr_cli.create(index_res)
+
+        elasticpy.ElasticSearch().index_create('test_index')
+
+
+        self.ims_cli.delete_index(index_id)
+
+        with self.assertRaises(NotFound):
+            self.rr_cli.read(index_id)
+
+        indices = elasticpy.ElasticSearch().index_list()
+
+        self.assertFalse("test_index" in indices, "Index not deleted from ElasticSearch")
+
+
 
     def test_list_indexes(self):
         pass

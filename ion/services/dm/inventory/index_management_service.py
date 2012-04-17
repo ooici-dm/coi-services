@@ -24,9 +24,9 @@ class IndexManagementService(BaseIndexManagementService):
     """
     class docstring
     """
-    COUCHDB_RIVER_INDEX=1
-    SIMPLE_INDEX=2
-    ADVANCED_INDEX=3
+    COUCHDB_RIVER_INDEX='couchdb_river'
+    SIMPLE_INDEX='simple_index'
+    ADVANCED_INDEX='advanced_index'
 
 
     def create_index(self, index_name='', index_type='', options=None, datastore_name=''):
@@ -57,14 +57,14 @@ class IndexManagementService(BaseIndexManagementService):
                 couchdb_host=CFG.server.couchdb.host,
                 couchdb_port=CFG.server.couchdb.port
             )
-            index_res.index_type = 'couchdb_river'
+            index_res.index_type = IndexManagementService.COUCHDB_RIVER_INDEX
 
         elif index_type == IndexManagementService.SIMPLE_INDEX:
             #--------------------------------------
             # Create a simple index
             #--------------------------------------
             es.index_create(index_name)
-            index_res.index_type = 'simple_index'
+            index_res.index_type = IndexManagementService.SIMPLE_INDEX
 
 
         elif index_type == IndexManagementService.ADVANCED_INDEX:
@@ -89,7 +89,7 @@ class IndexManagementService(BaseIndexManagementService):
                 shards = shards or 5,
                 replicas = replicas or 1
             )
-            index_res.index_type = 'advanced_index'
+            index_res.index_type = IndexManagementService.ADVANCED_INDEX
             index_res.options = options
 
         index_id, _ = self.clients.resource_registry.create(index_res)

@@ -41,7 +41,8 @@ class CatalogManagementService(BaseCatalogManagementService):
         @param catalog    Catalog
         @retval success    bool
         """
-        pass
+        self.clients.resource_registry.update(catalog)
+        return True
 
     def read_catalog(self, catalog_id=''):
         """Read catalog resources
@@ -49,7 +50,7 @@ class CatalogManagementService(BaseCatalogManagementService):
         @param catalog_id    str
         @retval catalog    Catalog
         """
-        pass
+        return self.clients.resource_registry.read(catalog_id)
 
     def delete_catalog(self, catalog_id=''):
         """@todo document this interface!!!
@@ -65,6 +66,10 @@ class CatalogManagementService(BaseCatalogManagementService):
         @param index_ids    list
         @retval success    bool
         """
+        catalog_res      = self.read_catalog(catalog_id)
+        available_fields = set(catalog_res.available_fields)
+        catalog_fields   = set(catalog_res.catalog_fields)
+
         for index_id in index_ids:
             index_res = self.clients.resource_registry.read(index_id)
             #==========================================================
@@ -72,7 +77,21 @@ class CatalogManagementService(BaseCatalogManagementService):
             #----------------------------------------------------------
 
             self.clients.resource_registry.create_association(subject=catalog_id, predicate=PRED.hasIndex,object=index_id)
-            
+            available_fields.union(index_res.options.attribute_match)
+            available_fields.union(index_res.options.wildcard)
+            available_fields.union(index_res.options.range_fields)
+            available_fields.union(index_res.options.geo_fields)
+
+            catalog_fields.intersection(index_res.options.attribute_match)
+            catalog_fields.intersection(index_res.options.wildcard)
+            catalog_fields.intersection(index_res.options.range_fields)
+            catalog_fields.intersection(index_res.options.geo_fields)
+
+
+        catalog_res.available_fields = list(available_fields)
+        catalog_res.catalog_fields   = list(catalog_fields)
+
+        self.update_catalog(catalog)    
 
         return True
             
@@ -83,6 +102,6 @@ class CatalogManagementService(BaseCatalogManagementService):
         @param catalog_id    str
         @retval success    list
         """
-        index_ids, assocs = self.clients.resource_registry.find_associations(subject=catalog_id, predicate=PRED.hasIndex, id_only=True)
+        index_ids, assocs = self.clients.resource_registry.find_associations(subject=catalog_id, predicate=PRED.hasIndex, id_only=id_only)
         return index_ids
 

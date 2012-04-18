@@ -10,8 +10,6 @@ from pyon.public import CFG
 from pyon.core.bootstrap import get_sys_name
 from pyon.core.exception import NotFound, BadRequest
 from interface.objects import Index
-import json
-import urllib2
 from interface.services.dm.iindex_management_service import BaseIndexManagementService
 import elasticpy as ep
 from pyon.util.log import log
@@ -31,6 +29,7 @@ class IndexManagementService(BaseIndexManagementService):
 
     def create_index(self, index_name='', index_type='', options=None, datastore_name=''):
         '''
+        Creates an index resource and
         '''
         if not index_type:
             index_type = IndexManagementService.SIMPLE_INDEX
@@ -158,9 +157,9 @@ class IndexManagementService(BaseIndexManagementService):
         Breadth First Search of resources based on given resource
         '''
         marked = [resource_id]
-        queue = [resource_id]
+        queue  = [resource_id]
         while len(queue) > 0:
-            t = queue.pop(0)
+            t  = queue.pop(0)
             marked.append(t)
             res_ids, assocs = self.clients.resource_registry.find_objects(subject=t, id_only=True)
             for res in res_ids:

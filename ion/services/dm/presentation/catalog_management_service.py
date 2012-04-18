@@ -19,7 +19,7 @@ class CatalogManagementService(BaseCatalogManagementService):
     """
 
 
-    def create_catalog(self, catalog_name=''):
+    def create_catalog(self, catalog_name='', keywords=''):
         """A catalog is a new data set that aggregates and presents datasets in a specific way.
         @param catalog_name    str
         @retval catalog_id    str
@@ -31,7 +31,7 @@ class CatalogManagementService(BaseCatalogManagementService):
 
         catalog_res = Catalog(name=catalog_name)
 
-        catalog_id = self.clients.resource_registry.create(catalog_res)
+        catalog_id, _ = self.clients.resource_registry.create(catalog_res)
 
         return catalog_id
 
@@ -60,7 +60,7 @@ class CatalogManagementService(BaseCatalogManagementService):
         """
         pass
 
-    def add_index(self, catalog_id='', index_ids=None):
+    def add_indexes(self, catalog_id='', index_ids=None):
         """Add an index to the specified catalog
 
         @param index_ids    list
@@ -91,7 +91,7 @@ class CatalogManagementService(BaseCatalogManagementService):
         catalog_res.available_fields = list(available_fields)
         catalog_res.catalog_fields   = list(catalog_fields)
 
-        self.update_catalog(catalog)    
+        self.update_catalog(catalog_res)    
 
         return True
             

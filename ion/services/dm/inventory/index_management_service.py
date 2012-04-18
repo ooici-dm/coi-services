@@ -22,12 +22,12 @@ class IndexManagementService(BaseIndexManagementService):
     """
     class docstring
     """
-    COUCHDB_RIVER_INDEX='couchdb_river'
-    SIMPLE_INDEX='simple_index'
-    ADVANCED_INDEX='advanced_index'
+    COUCHDB_RIVER_INDEX = 'couchdb_river'
+    SIMPLE_INDEX        = 'simple_index'
+    ADVANCED_INDEX      = 'advanced_index'
 
 
-    def create_index(self, index_name='', index_type='', options=None, datastore_name=''):
+    def create_index(self, index_name='', index_type='', options=None, datastore_name='', shards=5, replicas=1):
         '''
         Creates an index resource and
         '''
@@ -70,18 +70,6 @@ class IndexManagementService(BaseIndexManagementService):
             #--------------------------------------
             # Create an advanced index with options
             #--------------------------------------
-
-            shards = None
-            replicas = None
-            if options and options.has_key('itype'):
-                itype = options['itype']
-            else:
-                itype = index_name
-            if options and options.has_key('shards'):
-                shards = options['shards']
-            if options and options.has_key('replicas'):
-                replicas = options['replicas']
-
 
             es.index_create(
                 index_name=index_name,

@@ -58,7 +58,8 @@ class CatalogManagementService(BaseCatalogManagementService):
         @param catalog_id    str
         @retval success    bool
         """
-        pass
+        self.clients.resource_registry.delete(catalog_id)
+        return True
 
     def add_indexes(self, catalog_id='', index_ids=None):
         """Add an index to the specified catalog
@@ -75,17 +76,18 @@ class CatalogManagementService(BaseCatalogManagementService):
             #==========================================================
             # Parse index_res for fields and aggregate into the catalog
             #----------------------------------------------------------
-
             self.clients.resource_registry.create_association(subject=catalog_id, predicate=PRED.hasIndex,object=index_id)
-            available_fields.union(index_res.options.attribute_match)
-            available_fields.union(index_res.options.wildcard)
-            available_fields.union(index_res.options.range_fields)
-            available_fields.union(index_res.options.geo_fields)
 
-            catalog_fields.intersection(index_res.options.attribute_match)
-            catalog_fields.intersection(index_res.options.wildcard)
-            catalog_fields.intersection(index_res.options.range_fields)
-            catalog_fields.intersection(index_res.options.geo_fields)
+            index_fields = set(
+                    index_res.options.attribute_match + 
+                    index_res.options.wildcard + 
+                    index_res.options.range_fields +
+                    index_res.options.geo_fields
+                    )
+
+            available_fields = available_fields.union(index_fields)
+
+            catalog_fields = catalog_fields.intersection(index_fields)
 
 
         catalog_res.available_fields = list(available_fields)

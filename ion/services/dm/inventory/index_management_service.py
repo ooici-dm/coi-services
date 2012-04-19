@@ -26,6 +26,10 @@ class IndexManagementService(BaseIndexManagementService):
     SIMPLE_INDEX        = 'simple_index'
     ADVANCED_INDEX      = 'advanced_index'
 
+    def on_start(self):
+        pass
+
+
 
     def create_index(self, index_name='', index_type='', options=None, datastore_name='', shards=5, replicas=1):
         '''
@@ -155,3 +159,28 @@ class IndexManagementService(BaseIndexManagementService):
                     marked.append(res)
                     queue.append(res)
         return marked
+
+    def span_resources(self):
+        cc = self.container
+        design_schema = {'_id' : '_design/filters', 'filters':{}}
+        script_template = 'function(doc, req) { if(doc.type_ == "%s"){ return true; } }'
+
+        for t in RT.values():
+            design_schema['filters'][t.lower()]=script_template % t
+
+        db = cc.datastore_manager.get_datastore('resources')
+        datastore_name = db.datastore_name
+        db = db.server[datastore_name]
+
+        db.create(design_schema)
+
+        for t in RT.values():
+            #@todo: add couch parameters
+            ep.ElasticSearch().river_couchdb_create(
+                index_name='pyon',
+                index_type=t.lower(),
+                couchdb_db=datastore_name,
+                couchdb_host=CFG.server.couchdb.host,
+                couchdb_port=CFG.server.couchdb.port,
+                river_name='res_%s' % t.lower(),
+                couchdb_filter='filters/%s' % t.lower())

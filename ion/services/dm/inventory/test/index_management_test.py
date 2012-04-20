@@ -10,6 +10,7 @@ import elasticpy
 from nose.plugins.attrib import attr
 from interface.objects import Index
 from pyon.core.exception import NotFound
+from pyon.ion.resource import RT
 from pyon.util.int_test import IonIntegrationTestCase
 from pyon.util.unit_test import PyonTestCase
 from interface.services.coi.iresource_registry_service import ResourceRegistryServiceClient
@@ -52,7 +53,7 @@ class IndexManagementUnitTest(PyonTestCase):
             instance.index_create = mock_index_create
 
             # Execution
-            retval = self.index_management.create_index('test_index', IndexManagementService.SIMPLE_INDEX)
+            retval = self.index_management.create_index(self.index_name, IndexManagementService.SIMPLE_INDEX)
 
             # Assertions
             self.assertFalse(mock_river_create.called, 'A river should not have been created.')
@@ -105,9 +106,11 @@ class IndexManagementUnitTest(PyonTestCase):
 
 
 
-
 @attr('INT',group='dm')
 class IndexManagementIntTest(IonIntegrationTestCase):
+    def __init__(self, *args, **kwargs):
+        super(IndexManagementIntTest,self).__init__(*args, **kwargs)
+        self.index_name = 'test_index'
 
     def setUp(self):
         from urllib2 import HTTPError
@@ -119,7 +122,7 @@ class IndexManagementIntTest(IonIntegrationTestCase):
         self.ims_cli = IndexManagementServiceClient()
         self.rr_cli = ResourceRegistryServiceClient()
         try:
-            elasticpy.ElasticSearch().index_delete('test_index')
+            elasticpy.ElasticSearch().index_delete(self.index_name)
         except HTTPError:
             pass #Means the index isn't there
 
@@ -127,20 +130,20 @@ class IndexManagementIntTest(IonIntegrationTestCase):
         import urllib2
         import json
 
-        index_id = self.ims_cli.create_index('test_index', IndexManagementService.SIMPLE_INDEX)
+        index_id = self.ims_cli.create_index(self.index_name, IndexManagementService.SIMPLE_INDEX)
 
         index_res = self.rr_cli.read(index_id)
-        self.assertTrue(index_res.index_name == 'test_index', "Improperly formed resource.")
+        self.assertTrue(index_res.index_name == self.index_name, "Improperly formed resource.")
         self.assertTrue(index_res.index_type == 'simple_index', "Improperly formed resource. [%s]" % index_res.index_type)
 
         indices = elasticpy.ElasticSearch().index_list()
-        self.assertTrue("test_index" in indices, "Index failed to be created in ElasticSearch.")
+        self.assertTrue(self.index_name in indices, "Index failed to be created in ElasticSearch.")
 
         # Cleanup
-        elasticpy.ElasticSearch().index_delete('test_index')
+        elasticpy.ElasticSearch().index_delete(self.index_name)
 
     def test_read_index(self):
-        index_res = Index(name='test_index',index_name='test_index',index_type=IndexManagementService.SIMPLE_INDEX)
+        index_res = Index(name=self.index_name,index_name=self.index_name,index_type=IndexManagementService.SIMPLE_INDEX)
         index_id, _ = self.rr_cli.create(index_res)
 
         retval = self.ims_cli.read_index(index_id)
@@ -150,10 +153,10 @@ class IndexManagementIntTest(IonIntegrationTestCase):
 
 
     def test_delete_index(self):
-        index_res = Index(name='test_index',index_name='test_index',index_type='simple_index')
+        index_res = Index(name=self.index_name,index_name=self.index_name,index_type='simple_index')
         index_id, _ = self.rr_cli.create(index_res)
 
-        elasticpy.ElasticSearch().index_create('test_index')
+        elasticpy.ElasticSearch().index_create(self.index_name)
 
 
         self.ims_cli.delete_index(index_id)
@@ -163,7 +166,7 @@ class IndexManagementIntTest(IonIntegrationTestCase):
 
         indices = elasticpy.ElasticSearch().index_list()
 
-        self.assertFalse("test_index" in indices, "Index not deleted from ElasticSearch")
+        self.assertFalse(self.index_name in indices, "Index not deleted from ElasticSearch")
 
 
 
@@ -188,3 +191,19 @@ class IndexManagementIntTest(IonIntegrationTestCase):
     def test_query(self):
         pass
 
+    def test_span_resources(self):
+        import re
+        import time
+        index_id = self.ims_cli.create_index(index_name=self.index_name, index_type=IndexManagementService.ADVANCED_INDEX)
+
+        self.ims_cli.span_resources(index_id)
+
+        resource_list = list([i.lower() for i in RT.values()])
+
+        type_list = elasticpy.ElasticSearch().type_list('_river')
+        types = [re.sub(r'res_','',i) for i in type_list]
+
+        self.assertTrue(set(resource_list).difference(types) == set([]), 'Type creation mismatch\n%s' % set(resource_list).difference(types))
+
+        elasticpy.ElasticSearch().index_delete(self.index_name)
+        elasticpy.ElasticSearch().index_delete('_river') # EEK!!!! DANGEROUS

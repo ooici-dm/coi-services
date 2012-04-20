@@ -11,8 +11,10 @@ from pyon.core.bootstrap import get_sys_name
 from pyon.core.exception import NotFound, BadRequest
 from interface.objects import Index
 from interface.services.dm.iindex_management_service import BaseIndexManagementService
-import elasticpy as ep
 from pyon.util.log import log
+
+import interface.objects
+import elasticpy as ep
 
 
 elasticsearch_host = 'localhost'
@@ -76,9 +78,9 @@ class IndexManagementService(BaseIndexManagementService):
             #--------------------------------------
 
             es.index_create(
-                index_name=index_name,
-                shards = shards or 5,
-                replicas = replicas or 1
+                index=index_name,
+                number_of_shards = shards or 5,
+                number_of_replicas = replicas or 1
             )
             index_res.index_type = IndexManagementService.ADVANCED_INDEX
             index_res.options = options
@@ -160,8 +162,45 @@ class IndexManagementService(BaseIndexManagementService):
                     queue.append(res)
         return marked
 
-    def span_resources(self):
+
+    def _map_resources(self, index):
+        if isinstance(index, str):
+            index_res = self.read_index(index)
+        else:
+            index_res = index
+        
+        index_name = index_res.index_name
+
+        types = RT.values()
+        for t in types:
+            properties_map = dict()
+            mapping = { 'res_%s' % t : { 'properties' : properties_map}}
+            cls = getattr(interface.objects,t)
+            attrs = cls._schema
+            for k,v in attrs.iteritems():
+
+                rt = v['type']
+
+                if rt == 'str':
+                    properties_map.update(ep.ElasticMap(k).type('string'))
+                if rt == 'int':
+                    properties_map.update(ep.ElasticMap(k).type('long'))
+                if rt == 'float':
+                    properties_map.update(ep.ElasticMap(k).type('double'))
+
+            ep.ElasticSearch().raw('%s/res_%s/_mapping' % (index_name,t), 'PUT', mapping) 
+
+
+        
+
+    def span_resources(self, index_id='', map_types=True):
         cc = self.container
+
+        index_res = self.read_index(index_id)
+        
+        if map_types:
+            self._map_resources(index_res)
+
         design_schema = {'_id' : '_design/filters', 'filters':{}}
         script_template = 'function(doc, req) { if(doc.type_ == "%s"){ return true; } }'
 
@@ -177,10 +216,11 @@ class IndexManagementService(BaseIndexManagementService):
         for t in RT.values():
             #@todo: add couch parameters
             ep.ElasticSearch().river_couchdb_create(
-                index_name='pyon',
+                index_name=index_res.index_name,
                 index_type=t.lower(),
                 couchdb_db=datastore_name,
                 couchdb_host=CFG.server.couchdb.host,
                 couchdb_port=CFG.server.couchdb.port,
                 river_name='res_%s' % t.lower(),
                 couchdb_filter='filters/%s' % t.lower())
+

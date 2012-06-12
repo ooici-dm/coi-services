@@ -275,17 +275,10 @@ class QueryLanguage(object):
 
             #@todo implement using regex to mimic lucene...
             # if the field is a resource_id, we apply regex...this allows for approximate matches for these resource_ids
-            if field == 'resource_id':
-                regex_pattern = Regex(query['value'])
-                res = regex_pattern.searchString(field_val)
-                if res:
-                    return True
 
-            else: # the value of the field is of type float or int...and we want to get an exact match
-                  # note: the type of query['value'] is always string... this is the way the query language returns its parsed results
-                if str(field_val) == query['value']:
-                    print ("type of query['value']: ", type(query['value']) )
-                    return True
+            regex_pattern = Regex(query['value'])
+            res = regex_pattern.searchString(str(field_val))
+            return res
 
         elif cls.query_is_range_search(query):
             # always a numeric value - float or int

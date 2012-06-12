@@ -225,7 +225,7 @@ class UserNotificationTest(PyonTestCase):
         % (field, lower_bound, upper_bound, instrument)
         query = parser.parse(search_string1)
 
-        event = ExampleDetectableEvent('TestEvent', voltage=4)
+        event = ExampleDetectableEvent('TestEvent', description='The quick brown fox jumps over the lazy dog',voltage=4)
         self.assertFalse(QueryLanguage.match(event, query['query']))
 
         #------------------------------------------------------------------------------------------------------

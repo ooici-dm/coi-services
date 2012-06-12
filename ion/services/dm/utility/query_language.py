@@ -266,6 +266,7 @@ class QueryLanguage(object):
 
     @classmethod
     def match(cls, event = None, query = None):
+        #@David - the from field is not currently used in match - could be used to describe the subscription for events?
 
         field = query['field']
         field_val = getattr(event, field)
@@ -277,8 +278,7 @@ class QueryLanguage(object):
             # if the field is a resource_id, we apply regex...this allows for approximate matches for these resource_ids
 
             regex_pattern = Regex(query['value'])
-            res = regex_pattern.searchString(str(field_val))
-            return res
+            return regex_pattern.searchString(field_val)
 
         elif cls.query_is_range_search(query):
             # always a numeric value - float or int
@@ -297,7 +297,7 @@ class QueryLanguage(object):
             cond_x = (field_val[0] > query['top_left'][0]) and (field_val[0] < query['bottom_right'][0])
             cond_y = (field_val[1] > query['bottom_right'][1]) and (field_val[1] < query['top_left'][1])
 
-            return (cond_x and cond_y)
+            return cond_x and cond_y
         else:
             raise BadRequest("Missing parameters value and range for query: %s" % query)
 

@@ -267,19 +267,30 @@ class QueryLanguage(object):
     @classmethod
     def match(cls, event = None, query = None):
 
-        field_val = getattr(event,query['field'])
+        field = query['field']
+        field_val = getattr(event, field)
 
         if cls.query_is_term_search(query):
             # This is a term search - always a string
 
             #@todo implement using regex to mimic lucene...
+            # if the field is a resource_id, we apply regex...this allows for approximate matches for these resource_ids
+            if field == 'resource_id':
+                regex_pattern = Regex(query['value'])
+                res = regex_pattern.searchString(field_val)
+                if res:
+                    return True
 
-            if str(field_val) == query['value']:
-                return True
+            else: # the value of the field is of type float or int...and we want to get an exact match
+                  # note: the type of query['value'] is always string... this is the way the query language returns its parsed results
+                if str(field_val) == query['value']:
+                    print ("type of query['value']: ", type(query['value']) )
+                    return True
 
         elif cls.query_is_range_search(query):
             # always a numeric value - float or int
             if (field_val >=  query['range']['from']) and (field_val <= query['range']['to']):
+                print ("type of query['range']['from']: ", type(query['range']['from']) )
                 return True
             else:
                 return False
@@ -289,14 +300,11 @@ class QueryLanguage(object):
             pass
 
         elif cls.query_is_geo_bbox_search(query):
-            #@todo implement this now.
 
-#            self.assertTrue(retval == {'and':[], 'or':[], 'query':{'field':'location', 'top_left':[0.0, 40.0],
-#                                                                       'bottom_right': [40.0, 0.0], 'index':'index'}})
+            cond_x = (field_val[0] > query['top_left'][0]) and (field_val[0] < query['bottom_right'][0])
+            cond_y = (field_val[1] > query['bottom_right'][1]) and (field_val[1] < query['top_left'][1])
 
-#            if field_val
-
-            pass
+            return (cond_x and cond_y)
         else:
             raise BadRequest("Missing parameters value and range for query: %s" % query)
 

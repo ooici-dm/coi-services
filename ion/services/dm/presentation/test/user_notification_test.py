@@ -260,6 +260,49 @@ class UserNotificationTest(PyonTestCase):
         event = ExampleDetectableEvent('TestEvent', voltage=14)
         self.assertFalse(QueryLanguage.match(event, query['query']))
 
+        #------------------------------------------------------------------------------------------------------
+        # Check regex match of resource_id
+        #------------------------------------------------------------------------------------------------------
+        field = 'resource_id'
+        index = 'instrument_1'
+        value = 'reso*'
+        search_string = "search '%s' is '%s' from '%s'" % (field, value, index)
+        query = parser.parse(search_string)
+
+        event = ExampleDetectableEvent('TestEvent', resource_id= 'this_resource_id')
+        self.assertTrue(QueryLanguage.match(event, query['query']))
+
+        #------------------------------------------------------------------------------------------------------
+        # Check regex NON MATCH of resource_id
+        #------------------------------------------------------------------------------------------------------
+        field = 'resource_id'
+        index = 'instrument_1'
+        value = 'aba*'
+        search_string = "search '%s' is '%s' from '%s'" % (field, value, index)
+        query = parser.parse(search_string)
+
+        event = ExampleDetectableEvent('TestEvent', resource_id= 'this_resource_id')
+        self.assertFalse(QueryLanguage.match(event, query['query']))
+
+        #------------------------------------------------------------------------------------------------------
+        # Check geo_bbox_search -- location is within box
+        #------------------------------------------------------------------------------------------------------
+        search_string = "search 'location' geo box top-left lat 40 lon 0 bottom-right lat 0 lon 40 from 'instrument_resource_id'"
+        query = parser.parse(search_string)
+
+        event = ExampleDetectableEvent('TestEvent', location= [20.0, 30.0])
+        self.assertTrue(QueryLanguage.match(event, query['query']))
+
+        #------------------------------------------------------------------------------------------------------
+        # Check geo_bbox_search -- location is outside box
+        #------------------------------------------------------------------------------------------------------
+        search_string = "search 'location' geo box top-left lat 40 lon 0 bottom-right lat 0 lon 40 from 'instrument_resource_id'"
+        query = parser.parse(search_string)
+
+        event = ExampleDetectableEvent('TestEvent', location= [50.0, 30.0])
+        self.assertFalse(QueryLanguage.match(event, query['query']))
+
+
     def test_evaluate_condition(self):
 
         parser = QueryLanguage()

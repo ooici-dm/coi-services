@@ -9,7 +9,7 @@ from interface.services.coi.iidentity_management_service import IdentityManageme
 from interface.services.coi.iresource_registry_service import ResourceRegistryServiceClient
 from interface.services.dm.iuser_notification_service import UserNotificationServiceClient
 from ion.services.dm.presentation.user_notification_service import UserNotificationService
-from interface.objects import DeliveryMode, UserInfo, DeliveryConfig, DetectionFilterConfig
+from interface.objects import DeliveryMode, UserInfo, DeliveryConfig, DetectionFilterConfig, GeospatialLocation
 from pyon.util.int_test import IonIntegrationTestCase
 from pyon.util.unit_test import PyonTestCase
 from pyon.public import IonObject, RT, PRED, Container
@@ -261,27 +261,39 @@ class UserNotificationTest(PyonTestCase):
         self.assertFalse(QueryLanguage.match(event, query['query']))
 
         #------------------------------------------------------------------------------------------------------
-        # Check regex match of resource_id
+        # Check regex match of the description of an event
         #------------------------------------------------------------------------------------------------------
-        field = 'resource_id'
+        field = 'description'
         index = 'instrument_1'
-        value = 'reso*'
+        value = 'quick'
         search_string = "search '%s' is '%s' from '%s'" % (field, value, index)
         query = parser.parse(search_string)
 
-        event = ExampleDetectableEvent('TestEvent', resource_id= 'this_resource_id')
+        event = ExampleDetectableEvent('TestEvent', description='The quick brown fox jumps over the lazy dog')
+        self.assertTrue(QueryLanguage.match(event, query['query']))
+
+        #------------------------------------------------------------------------------------------------------
+        # Check a more complicated pattern for a regex match of the description of an event
+        #------------------------------------------------------------------------------------------------------
+        field = 'description'
+        index = 'instrument_1'
+        value = r'(?:[0-9])+.*jumps'
+        search_string = "search '%s' is '%s' from '%s'" % (field, value, index)
+        query = parser.parse(search_string)
+
+        event = ExampleDetectableEvent('TestEvent', description='The quick brown fox 023 jumps over the lazy dog')
         self.assertTrue(QueryLanguage.match(event, query['query']))
 
         #------------------------------------------------------------------------------------------------------
         # Check regex NON MATCH of resource_id
         #------------------------------------------------------------------------------------------------------
-        field = 'resource_id'
+        field = 'description'
         index = 'instrument_1'
         value = 'aba*'
         search_string = "search '%s' is '%s' from '%s'" % (field, value, index)
         query = parser.parse(search_string)
 
-        event = ExampleDetectableEvent('TestEvent', resource_id= 'this_resource_id')
+        event = ExampleDetectableEvent('TestEvent', description='The quick brown fox jumps over the lazy dog')
         self.assertFalse(QueryLanguage.match(event, query['query']))
 
         #------------------------------------------------------------------------------------------------------
@@ -290,7 +302,7 @@ class UserNotificationTest(PyonTestCase):
         search_string = "search 'location' geo box top-left lat 40 lon 0 bottom-right lat 0 lon 40 from 'instrument_resource_id'"
         query = parser.parse(search_string)
 
-        event = ExampleDetectableEvent('TestEvent', location= [20.0, 30.0])
+        event = ExampleDetectableEvent('TestEvent', location= GeospatialLocation(20.0, 30.0))
         self.assertTrue(QueryLanguage.match(event, query['query']))
 
         #------------------------------------------------------------------------------------------------------
@@ -299,9 +311,8 @@ class UserNotificationTest(PyonTestCase):
         search_string = "search 'location' geo box top-left lat 40 lon 0 bottom-right lat 0 lon 40 from 'instrument_resource_id'"
         query = parser.parse(search_string)
 
-        event = ExampleDetectableEvent('TestEvent', location= [50.0, 30.0])
+        event = ExampleDetectableEvent('TestEvent', location= GeospatialLocation(50.0, 30.0))
         self.assertFalse(QueryLanguage.match(event, query['query']))
-
 
     def test_evaluate_condition(self):
 

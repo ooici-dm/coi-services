@@ -275,15 +275,12 @@ class QueryLanguage(object):
             # This is a term search - always a string
 
             #@todo implement using regex to mimic lucene...
-            # if the field is a resource_id, we apply regex...this allows for approximate matches for these resource_ids
-
             regex_pattern = Regex(query['value'])
             return regex_pattern.searchString(field_val)
 
         elif cls.query_is_range_search(query):
             # always a numeric value - float or int
             if (field_val >=  query['range']['from']) and (field_val <= query['range']['to']):
-                print ("type of query['range']['from']: ", type(query['range']['from']) )
                 return True
             else:
                 return False
@@ -294,8 +291,8 @@ class QueryLanguage(object):
 
         elif cls.query_is_geo_bbox_search(query):
 
-            cond_x = (field_val[0] > query['top_left'][0]) and (field_val[0] < query['bottom_right'][0])
-            cond_y = (field_val[1] > query['bottom_right'][1]) and (field_val[1] < query['top_left'][1])
+            cond_x = (field_val.lon > query['top_left'][0]) and (field_val.lon < query['bottom_right'][0])
+            cond_y = (field_val.lat > query['bottom_right'][1]) and (field_val.lat < query['top_left'][1])
 
             return cond_x and cond_y
         else:

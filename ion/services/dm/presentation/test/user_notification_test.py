@@ -21,7 +21,6 @@ from pyon.event.event import EventPublisher
 import gevent
 from mock import Mock, mocksignature
 from interface.objects import NotificationRequest, NotificationType, ExampleDetectableEvent
-from ion.services.dm.presentation.discovery_service import QueryLanguage
 from ion.services.dm.utility.query_language import QueryLanguage
 import os
 import gevent

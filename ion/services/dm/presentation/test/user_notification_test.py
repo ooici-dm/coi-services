@@ -285,7 +285,19 @@ class UserNotificationTest(PyonTestCase):
         self.assertTrue(QueryLanguage.match(event, query['query']))
 
         #------------------------------------------------------------------------------------------------------
-        # Check regex NON MATCH of resource_id
+        # Check a failed match for regex in the description of an event
+        #------------------------------------------------------------------------------------------------------
+        field = 'description'
+        index = 'instrument_1'
+        value = r'(?:[a-zA-Z0-9])+.*howzzat+' # the word 'howzzat' is not in the description
+        search_string = "search '%s' is '%s' from '%s'" % (field, value, index)
+        query = parser.parse(search_string)
+
+        event = ExampleDetectableEvent('TestEvent', description='The quick brown fox 023 jumps over the lazy dog')
+        self.assertFalse(QueryLanguage.match(event, query['query']))
+
+        #------------------------------------------------------------------------------------------------------
+        # Check regex NON MATCH of the description of an event
         #------------------------------------------------------------------------------------------------------
         field = 'description'
         index = 'instrument_1'
